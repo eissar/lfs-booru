@@ -1,0 +1,9 @@
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text
+
+# Set line endings to LF for Unix systems
+* text=auto eol=lf
+
+# Exclude thumbnails (Must stay at the bottom)
+*.thumbnail.png -filter -diff -merge text

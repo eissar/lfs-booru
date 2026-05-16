@@ -1,0 +1,1389 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Git LFS Server",
+        "description": "HTTP server implementing the Git Large File Storage (LFS) protocol, including object transfer (basic and tus), file locking, and a batch API.\n\n**Route disambiguation via Accept header**\n\nSeveral paths are registered twice for the same HTTP method. The router uses the `Accept` header to pick the correct handler. Requests without the required `Accept` value do not match these routes:\n- `application/octet-stream` → content handler (raw binary transfer)\n- `application/vnd.git-lfs+json` → metadata handler (JSON)\n\n**Dual path prefixes**\n\nEvery object/batch route exists in two forms: with a `/{user}/{repo}/` prefix (multi-repo deployments) and without (single-repo deployments). Both forms behave identically; `user` and `repo` are simply omitted from the shorter paths.\n\n**Management routes**\n\nAdditional server management routes may be registered by the implementation, but they are outside the Git LFS API contract and are intentionally excluded from this Swagger document.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/"
+        }
+    ],
+    "security": [
+        {
+            "basicAuth": [ ]
+        }
+    ],
+    "tags": [
+        {
+            "name": "Objects (user/repo)",
+            "description": "Object transfer and metadata endpoints scoped to a user/repo pair (multi-repo deployments)."
+        },
+        {
+            "name": "Objects (root)",
+            "description": "Same object endpoints without user/repo scope (single-repo deployments)."
+        },
+        {
+            "name": "Locks (user/repo)",
+            "description": "File-locking endpoints scoped to a user/repo pair."
+        },
+        {
+            "name": "TUS verify",
+            "description": "Callback used to finalise a tus resumable upload."
+        }
+    ],
+    "paths": {
+        "/{user}/{repo}/objects/batch": {
+            "post": {
+                "tags": [
+                    "Objects (user/repo)"
+                ],
+                "summary": "Batch object API",
+                "description": "Accepts a list of objects and returns the actions (upload/download URLs) the client should use. Advertises tus resumable-upload support when the server is configured for it and the client includes `\"tus\"` in the `transfers` list. The implementation does not reject malformed JSON here; a decode failure can still result in HTTP 200 with a zero-value response such as `objects: null`.",
+                "operationId": "batchUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Batch response containing per-object actions.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BatchRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{user}/{repo}/objects/{oid}": {
+            "get": {
+                "tags": [
+                    "Objects (user/repo)"
+                ],
+                "summary": "Download object content OR retrieve object metadata",
+                "description": "**Content download** (`Accept: application/octet-stream`): Streams the raw binary from the content store. Supports partial content via the `Range` header (HTTP 206).\n\n**Metadata retrieval** (`Accept: application/vnd.git-lfs+json`): Returns a JSON `Representation` of the object including download/upload hypermedia links.\n\nThe router selects the handler based on the `Accept` header — these are two distinct behaviours registered on the same method+path.",
+                "operationId": "getObjectUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptObject"
+                    },
+                    {
+                        "$ref": "#/components/parameters/range"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Full object content as raw bytes when `Accept: application/octet-stream`, or JSON `Representation` metadata when `Accept: application/vnd.git-lfs+json`.",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            },
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "206": {
+                        "description": "Partial binary object content (range request).",
+                        "headers": {
+                            "Content-Range": {
+                                "description": "Byte range returned. The current server output uses the remaining byte count as the denominator, e.g. `bytes 1024-8191/7168` for an 8192-byte object.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object not found. JSON metadata requests return an `ErrorMessage`; binary content requests return a plain-text status body.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorMessage"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ]
+            },
+            "head": {
+                "tags": [
+                    "Objects (user/repo)"
+                ],
+                "summary": "Check object existence (content) or metadata",
+                "description": "Same routing logic as GET but returns headers only. Useful for existence checks.",
+                "operationId": "headObjectUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptObject"
+                    },
+                    {
+                        "$ref": "#/components/parameters/range"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object exists."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object not found; no response body is sent for HEAD."
+                    },
+                    "206": {
+                        "description": "Partial content headers for a range request; no response body is sent for HEAD.",
+                        "headers": {
+                            "Content-Range": {
+                                "description": "Byte range returned. The current server output uses the remaining byte count as the denominator, e.g. `bytes 1024-8191/7168` for an 8192-byte object.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Objects (user/repo)"
+                ],
+                "summary": "Upload object content",
+                "description": "Receives raw binary from the client and stores it in the content store. Requires `Accept: application/octet-stream`. If the store operation fails, the metadata entry is also deleted (rollback).",
+                "operationId": "putObjectUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptContent"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object stored successfully."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object metadata not found. Body is plain text because this route requires `Accept: application/octet-stream`.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Content store error. Body is plain text because this route requires `Accept: application/octet-stream`.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/octet-stream": {
+                            "schema": {
+                                "type": "string",
+                                "format": "binary"
+                            }
+                        }
+                    },
+                    "description": "Raw binary content of the object."
+                }
+            }
+        },
+        "/{user}/{repo}/objects": {
+            "post": {
+                "tags": [
+                    "Objects (user/repo)"
+                ],
+                "summary": "Create / register an object (legacy single-object API)",
+                "description": "Registers an object in the metadata store and returns hypermedia links telling the client where to upload (or confirming the object already exists). Returns HTTP 202 if the client should upload, 200 if the object already exists in the content store. The response may include an `upload` action even on HTTP 200.",
+                "operationId": "postObjectUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object already exists in the content store; the response may still include an `upload` action.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Object registered; client should follow the `upload` action.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ObjectRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{user}/{repo}/locks": {
+            "get": {
+                "tags": [
+                    "Locks (user/repo)"
+                ],
+                "summary": "List locks",
+                "description": "Returns all active locks for the repository, optionally filtered by path. Supports cursor-based pagination.",
+                "operationId": "listLocksUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    },
+                    {
+                        "in": "query",
+                        "name": "path",
+                        "description": "Filter locks to this file path.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "description": "Opaque pagination cursor returned by a previous call.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Maximum number of locks to return. Parsed by the server as a base-10 integer string.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lock list (may be empty).",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LockList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Locks (user/repo)"
+                ],
+                "summary": "Create a lock",
+                "description": "Acquires a lock on the given path for the authenticated user. Returns HTTP 409 if a lock on that path already exists.",
+                "operationId": "createLockUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Lock created.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request body or lock creation error.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "409": {
+                        "description": "A lock for this path already exists.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected lock creation error.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LockResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LockRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{user}/{repo}/locks/verify": {
+            "post": {
+                "tags": [
+                    "Locks (user/repo)"
+                ],
+                "summary": "Verify locks (split ours vs theirs)",
+                "description": "Returns all locks divided into those owned by the caller (`ours`) and those owned by others (`theirs`). Supports cursor-based pagination. Default page size is 100. A JSON body is required even when all request fields are omitted. In public mode, no authenticated user context is available, so locks may all be classified as `theirs`.",
+                "operationId": "verifyLocksUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Locks split between caller and others.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VerifiableLockList"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request body.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VerifiableLockList"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerifiableLockRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/{user}/{repo}/locks/{id}/unlock": {
+            "post": {
+                "tags": [
+                    "Locks (user/repo)"
+                ],
+                "summary": "Delete (release) a lock",
+                "description": "Releases the lock identified by `{id}`. Only the lock owner may unlock without `force: true`. Admins or the owner may set `force: true` to release any lock. Returns HTTP 403 if a non-owner attempts to unlock without force.",
+                "operationId": "deleteLockUserRepo",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/user"
+                    },
+                    {
+                        "$ref": "#/components/parameters/repo"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "description": "Lock ID to release.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lock released.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnlockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request body or unlock error.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnlockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "403": {
+                        "description": "Caller does not own the lock and `force` was not set.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnlockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Lock not found.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnlockResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected unlock error.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnlockResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UnlockRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/objects/batch": {
+            "post": {
+                "tags": [
+                    "Objects (root)"
+                ],
+                "summary": "Batch object API (root)",
+                "description": "Identical to `POST /{user}/{repo}/objects/batch` but without user/repo scoping. For single-repo deployments. The implementation does not reject malformed JSON here; a decode failure can still result in HTTP 200 with a zero-value response such as `objects: null`.",
+                "operationId": "batchRoot",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Batch response.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BatchRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/objects/{oid}": {
+            "get": {
+                "tags": [
+                    "Objects (root)"
+                ],
+                "summary": "Download object content OR retrieve object metadata (root)",
+                "description": "Identical routing logic to `GET /{user}/{repo}/objects/{oid}`. Accept header selects between binary download and JSON metadata. OpenAPI response content entries model both binary and JSON response bodies explicitly.",
+                "operationId": "getObjectRoot",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptObject"
+                    },
+                    {
+                        "$ref": "#/components/parameters/range"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Full object content as raw bytes when `Accept: application/octet-stream`, or JSON `Representation` metadata when `Accept: application/vnd.git-lfs+json`.",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            },
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "206": {
+                        "description": "Partial binary object content (range request).",
+                        "headers": {
+                            "Content-Range": {
+                                "description": "Byte range returned. The current server output uses the remaining byte count as the denominator, e.g. `bytes 1024-8191/7168` for an 8192-byte object.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object not found. JSON metadata requests return an `ErrorMessage`; binary content requests return a plain-text status body.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorMessage"
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ]
+            },
+            "head": {
+                "tags": [
+                    "Objects (root)"
+                ],
+                "summary": "Check object existence (root)",
+                "operationId": "headObjectRoot",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptObject"
+                    },
+                    {
+                        "$ref": "#/components/parameters/range"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object exists."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object not found; no response body is sent for HEAD."
+                    },
+                    "206": {
+                        "description": "Partial content headers for a range request; no response body is sent for HEAD.",
+                        "headers": {
+                            "Content-Range": {
+                                "description": "Byte range returned. The current server output uses the remaining byte count as the denominator, e.g. `bytes 1024-8191/7168` for an 8192-byte object.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Objects (root)"
+                ],
+                "summary": "Upload object content (root)",
+                "description": "Identical to `PUT /{user}/{repo}/objects/{oid}` without user/repo scope.",
+                "operationId": "putObjectRoot",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    },
+                    {
+                        "$ref": "#/components/parameters/acceptContent"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object stored."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "description": "Object metadata not found. Body is plain text because this route requires `Accept: application/octet-stream`.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Content store error. Body is plain text because this route requires `Accept: application/octet-stream`.",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/octet-stream": {
+                            "schema": {
+                                "type": "string",
+                                "format": "binary"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/objects": {
+            "post": {
+                "tags": [
+                    "Objects (root)"
+                ],
+                "summary": "Create / register an object (root)",
+                "description": "Identical to `POST /{user}/{repo}/objects` without user/repo scope. The response may include an `upload` action even on HTTP 200.",
+                "operationId": "postObjectRoot",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/acceptMeta"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Object already exists in the content store; the response may still include an `upload` action.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Object registered; upload required.",
+                        "content": {
+                            "application/vnd.git-lfs+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Representation"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthorized"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    }
+                },
+                "security": [
+                    {
+                        "basicAuth": [ ]
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/vnd.git-lfs+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ObjectRequest"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/verify/{oid}": {
+            "post": {
+                "tags": [
+                    "TUS verify"
+                ],
+                "summary": "Finalise a tus resumable upload",
+                "description": "Called by the tus server (or the client) after all chunks of a resumable upload have been received. Instructs the server to move the assembled upload into the content store. **No authentication is required** on this endpoint. If finalisation fails, the current implementation terminates/logs fatally instead of returning a structured HTTP 500 response.",
+                "operationId": "verifyTus",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/oid"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Upload finalised and stored successfully."
+                    }
+                },
+                "security": [ ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "basicAuth": {
+                "type": "http",
+                "scheme": "basic",
+                "description": "HTTP Basic authentication. Authentication is enforced on all routes except `POST /verify/{oid}`, and only when the server is not running in public mode. In public mode credentials are not required; because no authenticated user context is established, lock ownership comparisons may classify all locks as `theirs`."
+            }
+        },
+        "parameters": {
+            "user": {
+                "in": "path",
+                "name": "user",
+                "required": true,
+                "description": "Repository owner / organisation name.",
+                "schema": {
+                    "type": "string"
+                }
+            },
+            "repo": {
+                "in": "path",
+                "name": "repo",
+                "required": true,
+                "description": "Repository name.",
+                "schema": {
+                    "type": "string"
+                }
+            },
+            "oid": {
+                "in": "path",
+                "name": "oid",
+                "required": true,
+                "description": "SHA-256 object identifier (64 hex characters).",
+                "schema": {
+                    "type": "string"
+                }
+            },
+            "acceptMeta": {
+                "in": "header",
+                "name": "Accept",
+                "required": true,
+                "description": "Required route selector for Git LFS JSON metadata endpoints.",
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "application/vnd.git-lfs+json"
+                    ]
+                }
+            },
+            "acceptContent": {
+                "in": "header",
+                "name": "Accept",
+                "required": true,
+                "description": "Required route selector for raw object content endpoints.",
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "application/octet-stream"
+                    ]
+                }
+            },
+            "acceptObject": {
+                "in": "header",
+                "name": "Accept",
+                "required": true,
+                "description": "Determines which handler processes the request. `application/octet-stream` → binary object content; `application/vnd.git-lfs+json` → JSON object metadata.",
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "application/octet-stream",
+                        "application/vnd.git-lfs+json"
+                    ]
+                }
+            },
+            "range": {
+                "in": "header",
+                "name": "Range",
+                "required": false,
+                "description": "Byte range for resumable downloads, e.g. `bytes=1024-`. Only meaningful when `Accept: application/octet-stream`; GET and HEAD may return 206.",
+                "schema": {
+                    "type": "string"
+                }
+            }
+        },
+        "responses": {
+            "Unauthorized": {
+                "description": "Authentication required or credentials invalid.",
+                "headers": {
+                    "WWW-Authenticate": {
+                        "description": "Always `Basic realm=git-lfs-server`.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "NotFound": {
+                "description": "Object or resource not found.",
+                "content": {
+                    "application/vnd.git-lfs+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ErrorMessage"
+                        }
+                    }
+                }
+            },
+            "BadRequest": {
+                "description": "Malformed request body.",
+                "content": {
+                    "application/vnd.git-lfs+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ErrorMessage"
+                        }
+                    }
+                }
+            },
+            "InternalError": {
+                "description": "Unexpected server error.",
+                "content": {
+                    "application/vnd.git-lfs+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "schemas": {
+            "ObjectRequest": {
+                "type": "object",
+                "description": "Payload for the legacy single-object POST endpoint.",
+                "required": [
+                    "oid",
+                    "size"
+                ],
+                "properties": {
+                    "oid": {
+                        "type": "string",
+                        "description": "SHA-256 OID of the object (64 hex characters)."
+                    },
+                    "size": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Size of the object in bytes."
+                    }
+                }
+            },
+            "BatchRequest": {
+                "type": "object",
+                "description": "Payload for the batch API.",
+                "required": [
+                    "operation",
+                    "objects"
+                ],
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "upload",
+                            "download"
+                        ],
+                        "description": "Requested operation for all objects in this batch. The Git LFS protocol defines `upload` and `download`; the server only special-cases `upload` and treats other decoded values as download-like."
+                    },
+                    "transfers": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Transfer adapters the client supports. Include `\"tus\"` to opt in to resumable uploads."
+                    },
+                    "objects": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ObjectRequest"
+                        },
+                        "description": "Objects requested by the client."
+                    }
+                }
+            },
+            "BatchResponse": {
+                "type": "object",
+                "properties": {
+                    "transfer": {
+                        "type": "string",
+                        "enum": [
+                            "basic",
+                            "tus"
+                        ],
+                        "description": "Transfer adapter reported by the server. Current implementation behavior is to emit `basic`; `tus` is listed as a protocol-compatible value for deployments that negotiate resumable uploads."
+                    },
+                    "objects": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Representation"
+                        },
+                        "nullable": true,
+                        "description": "Per-object representations. May be `null` if the server produced a zero-value response, for example after a batch request decode failure."
+                    }
+                }
+            },
+            "Representation": {
+                "type": "object",
+                "description": "Per-object metadata returned to clients, including hypermedia action links. Because the Go structs do not omit nil fields consistently, fields such as `actions` may appear as `null`; nullable fields are modeled with OpenAPI `nullable: true`.",
+                "properties": {
+                    "oid": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "actions": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/Link"
+                        },
+                        "nullable": true,
+                        "description": "Map of action name → link. Possible keys: `download`, `upload`, `verify`. May be `null`, especially when `error` is present."
+                    },
+                    "error": {
+                        "$ref": "#/components/schemas/ObjectError",
+                        "description": "Present instead of `actions` when this specific object encountered an error (e.g. 404 for a download of a missing object)."
+                    }
+                }
+            },
+            "Link": {
+                "type": "object",
+                "description": "Hypermedia link describing where and how to perform an action.",
+                "properties": {
+                    "href": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "header": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "HTTP headers the client must include in the follow-up request."
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "RFC3339 UTC timestamp after which this link should not be used. The current implementation may emit the zero value `0001-01-01T00:00:00Z` even when no real expiry was set."
+                    }
+                }
+            },
+            "ObjectError": {
+                "type": "object",
+                "description": "Per-object error inside a batch response.",
+                "properties": {
+                    "code": {
+                        "type": "integer",
+                        "description": "HTTP-equivalent error code, e.g. 404."
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "LockRequest": {
+                "type": "object",
+                "required": [
+                    "path"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Repository-relative file path to lock."
+                    }
+                }
+            },
+            "LockResponse": {
+                "type": "object",
+                "properties": {
+                    "lock": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Lock"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Created lock on success; may be `null` when `message` describes an error."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Error message when the operation failed."
+                    }
+                },
+                "description": "Response for lock creation. On errors, `message` is set and `lock` may be `null`."
+            },
+            "UnlockRequest": {
+                "type": "object",
+                "properties": {
+                    "force": {
+                        "type": "boolean",
+                        "description": "If true, release the lock even if the caller is not the owner."
+                    }
+                }
+            },
+            "UnlockResponse": {
+                "type": "object",
+                "properties": {
+                    "lock": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Lock"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Released lock on success; may be `null` when `message` describes an error."
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "description": "Response for lock release. On errors, `message` is set and `lock` may be `null`."
+            },
+            "LockList": {
+                "type": "object",
+                "properties": {
+                    "locks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Lock"
+                        },
+                        "nullable": true,
+                        "description": "Locks on the repository. May be `null` rather than an empty array when no slice was initialised."
+                    },
+                    "next_cursor": {
+                        "type": "string",
+                        "description": "Opaque cursor for the next page. Absent on the last page."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Error message when the store query failed."
+                    }
+                }
+            },
+            "VerifiableLockRequest": {
+                "type": "object",
+                "properties": {
+                    "cursor": {
+                        "type": "string"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Page size. Defaults to 100 when omitted or 0."
+                    }
+                }
+            },
+            "VerifiableLockList": {
+                "type": "object",
+                "properties": {
+                    "ours": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Lock"
+                        },
+                        "nullable": true,
+                        "description": "Locks owned by the authenticated user. May be `null`; in public mode this may be empty because no authenticated user context is available."
+                    },
+                    "theirs": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Lock"
+                        },
+                        "nullable": true,
+                        "description": "Locks owned by other users. May be `null`; in public mode locks may be classified here because no authenticated user context is available."
+                    },
+                    "next_cursor": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Error message when verification failed, including malformed request bodies."
+                    }
+                }
+            },
+            "Lock": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Randomly generated 40-hex-char lock identifier."
+                    },
+                    "path": {
+                        "type": "string"
+                    },
+                    "owner": {
+                        "$ref": "#/components/schemas/User"
+                    },
+                    "locked_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "User": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ErrorMessage": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

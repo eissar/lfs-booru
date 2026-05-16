@@ -1,0 +1,15 @@
+{
+    "tasks": {
+        "run": "deno run --allow-all ./index.ts"
+    },
+    "fmt": {
+        "exclude": [
+            "**/*.md",
+            "**/*.json"
+        ],
+        "lineWidth": 120,
+        "indentWidth": 4,
+        "singleQuote": true,
+        "proseWrap": "preserve"
+    }
+}

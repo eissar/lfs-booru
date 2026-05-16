@@ -1,0 +1,67 @@
+ 1. Add synchronous Git archival after ingest
+     - After writing pointer files / NDJSON events, run:
+           - git add ...
+           - git commit -m "..."
+     - Ensure failures are surfaced or retried.
+ 2. Enable Git LFS lazy hydration
+     - Configure ingest / clone flow with:
+           - GIT_LFS_SKIP_SMUDGE=1
+     - Document or script how clients hydrate specific blobs on demand.
+ 3. Fix missing image pointer
+     - Investigate why image 2’s pointer file is missing from images/.
+     - Add validation after ingest to confirm every uploaded image has a pointer file.
+ 4. Implement thumbnail generation
+     - Generate thumbnails during ingest.
+     - Store them outside LFS, matching .gitattributes expectations.
+     - Add a thumbnails directory if one does not exist.
+ 5. Replace full index rebuild with incremental indexing
+     - Track processed NDJSON segments / offsets.
+     - Read only newly appended events.
+     - Update tag_index.json and related indexes incrementally.
+ 6. Decouple indexing from ingest
+     - Remove synchronous spawning of indexer.ts from ingest.
+     - Add an events/ filesystem watcher.
+     - Trigger indexing when new event files or segments appear.
+ 7. Introduce pluggable index backend
+     - Define an index backend interface.
+     - Keep current JSON backend as default.
+     - Leave room for SQLite/bbolt/roaring bitmap implementations later.
+ 8. Add query operations
+     - Implement tag intersection.
+     - Implement tag exclusion.
+     - Implement counts / facets.
+     - Refactor tag_index.json access behind query helpers.
+ 9. Implement incremental static renderer
+     - Generate static HTML pages for:
+           - homepage
+           - tag pages
+           - paginated image sets
+           - image detail pages
+     - Re-render only pages affected by new/changed events.
+ 10. Keep dynamic routes as fallback
+ - Preserve existing GET / and GET /image/:oid.
+ - Prefer static files where available.
+
+ 11. Add Git scaling optimizations
+ - Support partial clone with --filter=blob:none.
+ - Add sparse checkout instructions/scripts.
+ - Add scheduled git gc.
+
+ 12. Add background Git batch writer
+ - Batch file additions and commits when async mode is introduced.
+ - Ensure the synchronous archival path remains available for durability.
+
+ Suggested order:
+
+ 1. Fix missing pointer file.
+ 2. Add Git commits after ingest.
+ 3. Enable LFS lazy hydration.
+ 4. Add thumbnail generation.
+ 5. Build watcher-driven incremental indexer.
+ 6. Add query helpers.
+ 7. Add static renderer.
+ 8. Add Git scaling optimizations.
+
+ possible:
+ important demarcation lines:
+ indexer
