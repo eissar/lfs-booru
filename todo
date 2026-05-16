@@ -1,23 +1,28 @@
- 1. Add synchronous Git archival after ingest
-     - After writing pointer files / NDJSON events, run:
-           - git add ...
-           - git commit -m "..."
-     - Ensure failures are surfaced or retried.
+ 1. Init library code by cloning from a static $TEMPLATE path
+
  2. Enable Git LFS lazy hydration
      - Configure ingest / clone flow with:
            - GIT_LFS_SKIP_SMUDGE=1
      - Document or script how clients hydrate specific blobs on demand.
- 3. Fix missing image pointer
-     - Investigate why image 2’s pointer file is missing from images/.
-     - Add validation after ingest to confirm every uploaded image has a pointer file.
+
+--> we added  lfs.fetchexclude to .lfsconfig in the template for now.
+
+ 3. - Add validation after ingest to confirm every uploaded image has a pointer file.
+
  4. Implement thumbnail generation
      - Generate thumbnails during ingest.
      - Store them outside LFS, matching .gitattributes expectations.
      - Add a thumbnails directory if one does not exist.
+
+    should be: /thumbnails ? /images/thumbnails? 
+    images/1.thumbnail.jpg ? what file type supports
+    incremental loading?
+
  5. Replace full index rebuild with incremental indexing
      - Track processed NDJSON segments / offsets.
      - Read only newly appended events.
      - Update tag_index.json and related indexes incrementally.
+
  6. Decouple indexing from ingest
      - Remove synchronous spawning of indexer.ts from ingest.
      - Add an events/ filesystem watcher.
