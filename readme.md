@@ -301,12 +301,12 @@ while staying surprisingly lightweight for personal or archival-scale usage.
 
 ## HTTP Ingest Caveat
 
-The `POST /ingest` endpoint uploads image bytes directly to the LFS server via the Batch API, writes the pointer file to `images/{id}.png`, appends an NDJSON event, and re-runs the indexer. It does **not** create a git commit.
+The `POST /ingest` endpoint uploads image bytes directly to the LFS server via the Batch API, writes the pointer file to `images/{id}.png`, appends an NDJSON event, and synchronously creates a git commit containing both files.
 
 This means:
 - The binary exists on the LFS server at its OID
-- The pointer file on disk is ready for `git add images/{id}.png && git commit`
-- **Until committed**, the pointer file is untracked — committing it gives git ownership of the blob reference
+- The pointer file and NDJSON event are staged with `git add -- images/{id}.png events/2026-05.ndjson`
+- A successful ingest returns only after `git commit` succeeds; `git add` or `git commit` failures are returned as JSON HTTP errors
 
 ## Image Filename & ID Convention
 

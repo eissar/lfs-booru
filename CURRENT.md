@@ -8,15 +8,17 @@ This file inventories what exists in the codebase.
 - Handles 404 catch-all for unknown paths
 - Logs requests to console
 
-### Ingest Pipeline (`handlers.ts`, 216 lines)
+### Ingest Pipeline (`handlers.ts`)
 - POST /ingest accepts multipart/form-data with image, name, tags, width, height, mtime
 - Computes SHA-256 of uploaded bytes as LFS OID
 - Deduplicates: if OID already exists in index, returns existing ID (200)
 - Performs two-step LFS upload via Batch API (POST /objects/batch then PUT to upload URL)
 - Writes LFS pointer file to `images/{id}.png`
 - Appends NDJSON event line to `events/2026-05.ndjson` (op:"add")
-- Spawns `indexer.ts` as a synchronous subprocess after each ingest
-- Does not run `git commit` or `git add` — pointer files and events remain untracked
+- Synchronously runs `git add -- images/{id}.png events/2026-05.ndjson`
+- Synchronously runs `git commit -m "ingest: add image {id}" -- images/{id}.png events/2026-05.ndjson`
+- Does **not** run `indexer.ts` during ingest (indexing remains a separate step)
+- Surfaces LFS, `git add`, and `git commit` failures as JSON HTTP errors
 
 ### Indexer (`indexer.ts`, 106 lines)
 - Runs as a standalone Deno script

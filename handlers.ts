@@ -87,13 +87,7 @@ export async function Ingest(req: Request): Promise<Response> {
         }
     }
 
-    const lfsRes = await PushImageToLFS(oid, bytes);
-    if (!lfsRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
+    const size = bytes.byteLength;
 
     const ids = Object.keys(state).map(Number);
     const nextId = ids.length > 0 ? Math.max(...ids) + 1 : 1;
@@ -126,37 +120,68 @@ export async function Ingest(req: Request): Promise<Response> {
         mtime,
     };
 
-    const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${bytes.byteLength}\n`;
+    const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 
-    await Deno.mkdir('events').catch(() => {}); // directory exists
+    const eventLogPath = 'events/2026-05.ndjson';
+
     await Deno.mkdir('images').catch(() => {}); // directory exists
-
     await Deno.writeTextFile(event.path, pointer);
 
-    const gitAddCmd = new Deno.Command('git', {
-        args: ['add', '--', event.path],
-    });
-    const gitAdd = await gitAddCmd.output();
-    if (!gitAdd.success) {
-        throw new Error(
-            `git add failed: ${new TextDecoder().decode(gitAdd.stderr)}`,
+    const lfsRes = await PushImageToLFS(oid, bytes);
+    if (!lfsRes.ok) {
+        return new Response(
+            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
         );
     }
 
+    // Optional for later:
+    // const cmd = new Deno.Command('deno', {
+    //     args: ['run', '--allow-read', '--allow-write', 'indexer.ts'],
+    // });
+    // const { success, stderr } = cmd.outputSync();
+    // if (!success) {
+    //     return new Response(
+    //         JSON.stringify({
+    //             error: `indexer failed: ${new TextDecoder().decode(stderr)}`,
+    //         }),
+    //         { status: 500, headers: { 'Content-Type': 'application/json' } },
+    //     );
+    // }
+
+    await Deno.mkdir('events').catch(() => {}); // directory exists
     await Deno.writeTextFile(
-        `events/2026-05.ndjson`,
+        eventLogPath,
         JSON.stringify(event) + '\n',
         { append: true, create: true },
     );
 
-    const cmd = new Deno.Command('deno', {
-        args: ['run', '--allow-read', '--allow-write', 'indexer.ts'],
-    });
-    const { success, stderr } = cmd.outputSync();
-    if (!success) {
+    const gitAdd = await new Deno.Command('git', {
+        args: ['add', '--', event.path, eventLogPath],
+    }).output();
+    if (!gitAdd.success) {
         return new Response(
             JSON.stringify({
-                error: `indexer failed: ${new TextDecoder().decode(stderr)}`,
+                error: `git add failed: ${new TextDecoder().decode(gitAdd.stderr)}`,
+            }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+    }
+
+    const gitCommit = await new Deno.Command('git', {
+        args: [
+            'commit',
+            '-m',
+            `ingest: add image ${nextId}`,
+            '--',
+            event.path,
+            eventLogPath,
+        ],
+    }).output();
+    if (!gitCommit.success) {
+        return new Response(
+            JSON.stringify({
+                error: `git commit failed: ${new TextDecoder().decode(gitCommit.stderr)}`,
             }),
             { status: 500, headers: { 'Content-Type': 'application/json' } },
         );
