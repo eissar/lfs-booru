@@ -1,20 +1,11 @@
 export const LFS_MEDIA_TYPE = 'application/vnd.git-lfs+json';
 export const LFS_CONTENT_MEDIA_TYPE = 'application/octet-stream';
 
-const LFS_SERVER = 'http://localhost:8080';
-
 export type Connection = {
     url: string;
     auth: string;
     user: string;
     repo: string;
-};
-
-const conn: Connection = {
-    url: LFS_SERVER,
-    auth: `Basic ${btoa('user:pass')}`,
-    user: '',
-    repo: '',
 };
 
 // Headers:
@@ -119,7 +110,7 @@ export async function GetObjectMeta(conn: Connection, oid: string, h: HeadersIni
 }
 // - GET
 //     - Accept: application/octet-stream → download raw object bytes (supports Range, can return 206)
-export async function GetObjectContent(conn: Connection, oid: string, h: HeadersInit) {
+export async function GetObjectContent(conn: Connection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -149,14 +140,3 @@ export async function HeadObjectMeta(conn: Connection, oid: string, h: HeadersIn
         // signal,
     });
 }
-
-const id = 'b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a';
-const a = await GetObjectMeta(conn, id, []);
-
-// const a = await PutObjectContent(
-//     conn,
-//     'b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a',
-//     Deno.readFileSync('/home/eissar/example-images/1.png'),
-//     [],
-// );
-console.log(await a.text());
