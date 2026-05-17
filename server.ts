@@ -1,4 +1,4 @@
-import { handleImage, handleIngest, handleRoot } from './handlers.ts';
+import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
