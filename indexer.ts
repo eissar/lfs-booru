@@ -40,7 +40,7 @@ type DeleteEvent = {
     id: number | string;
 };
 
-type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent;
+export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent;
 
 export type TagIndex = Record<string, string[]>;
 export type ImageStateIndex = Record<string, ImageState>;

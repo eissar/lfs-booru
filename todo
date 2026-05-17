@@ -1,20 +1,21 @@
- 1. Init library code by cloning from a static $TEMPLATE path
 
- 2. Enable Git LFS lazy hydration
-     - Configure ingest / clone flow with:
-           - GIT_LFS_SKIP_SMUDGE=1
-     - Document or script how clients hydrate specific blobs on demand.
-
---> we added  lfs.fetchexclude to .lfsconfig in the template for now.
-
- 3. - Add validation after ingest to confirm every uploaded image has a pointer file.
+ 2. Add server-side LFS object caching (no checkout-based hydration)
+ - Keep serving binaries via direct LFS HTTP requests.
+ - Add an optional local cache layer for hot objects.
+ - Evict with LRU, using max cache size (bytes) as primary limit.
+ - Optional secondary guardrail: max object count.
+ --> added lfs.fetchexclude to .lfsconfig
 
  4. Implement thumbnail generation
      - Generate thumbnails during ingest.
      - Store them outside LFS, matching .gitattributes expectations.
      - Add a thumbnails directory if one does not exist.
+     - progressive decoding:
+         lossy webp (vp8)
+         jpegxl - terrible browser support
 
-    should be: /thumbnails ? /images/thumbnails? 
+
+    should be: /thumbnails ? /images/thumbnails? /thumb /image
     images/1.thumbnail.jpg ? what file type supports
     incremental loading?
 
@@ -27,10 +28,12 @@
      - Remove synchronous spawning of indexer.ts from ingest.
      - Add an events/ filesystem watcher.
      - Trigger indexing when new event files or segments appear.
+
  7. Introduce pluggable index backend
      - Define an index backend interface.
      - Keep current JSON backend as default.
      - Leave room for SQLite/bbolt/roaring bitmap implementations later.
+
  8. Add query operations
      - Implement tag intersection.
      - Implement tag exclusion.
@@ -58,9 +61,7 @@
 
  Suggested order:
 
- 1. Fix missing pointer file.
- 2. Add Git commits after ingest.
- 3. Enable LFS lazy hydration.
+ 3. Add server-side LFS caching with size-based LRU eviction.
  4. Add thumbnail generation.
  5. Build watcher-driven incremental indexer.
  6. Add query helpers.
