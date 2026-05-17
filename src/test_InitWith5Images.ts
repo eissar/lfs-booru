@@ -4,7 +4,7 @@ import { panic } from '@/util.ts';
 import { LibraryConnection } from '@/library.ts';
 import { Init } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
-import { internalIngest } from '../handlers.ts';
+import { internalIngest } from '@/handlers.ts';
 
 for (const type of ['unhandledrejection', 'error']) {
     globalThis.addEventListener(type, (e) => {

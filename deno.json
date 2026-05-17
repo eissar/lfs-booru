@@ -1,6 +1,6 @@
 {
     "tasks": {
-        "run": "deno run --allow-all ./index.ts"
+        "run": "deno run --allow-all ./server.ts"
     },
     "fmt": {
         "exclude": [
