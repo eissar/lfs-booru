@@ -1,3 +1,5 @@
+// deno-lint-ignore-file no-explicit-any
+
 const DEBUG = true;
 
 // Side effect, w/e
@@ -10,22 +12,32 @@ Object.defineProperty(Error.prototype, Symbol.for('Deno.customInspect'), {
     enumerable: false,
     writable: true,
 });
+type DebugInput =
+    | any
+    | (() => any)
+    | (() => Promise<any>);
 
-/** monoid endofunctor or w/e */
-// deno-lint-ignore no-explicit-any
-export const debug = (val: any): any => {
-    // Replace with your actual debug flag or environment check
-    if (!DEBUG) return val;
+export const debug = (input: DebugInput): void => {
+    if (!DEBUG) return;
 
-    const str = Deno.inspect(val, {
-        showHidden: true,
-        trailingComma: true,
-    });
+    const run = async () => {
+        let val;
 
-    // TODO: better way to exclude empty strings?
-    if (/^"+$/.test(str)) return val;
+        if (typeof input === 'function') {
+            val = await input();
+        } else {
+            val = input;
+        }
 
-    console.log(str);
+        const str = Deno.inspect(val, {
+            showHidden: true,
+            trailingComma: true,
+        });
 
-    return val;
+        if (!/^"+$/.test(str)) {
+            console.log(str);
+        }
+    };
+
+    void run();
 };
