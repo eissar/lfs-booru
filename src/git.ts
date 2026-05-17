@@ -1,4 +1,4 @@
-import { fromFileUrl, resolve } from '@std/path';
+import { fromFileUrl, join, resolve } from '@std/path';
 import { GitConstructError, simpleGit } from 'simple-git';
 import { debug } from '@/logging.ts';
 import { panic } from '@/util.ts';
@@ -11,6 +11,8 @@ import { panic } from '@/util.ts';
 const TEMPLATE = fromFileUrl(new URL('../libraries/template', import.meta.url));
 
 /**
+ * @throws Error,GitError,GitConstructError
+ *
  * Idempotently initialize a booru library repo by cloning ./libraries/template.
  *
  * This intentionally does not call `git lfs ...` and does not edit .git/config.
@@ -36,16 +38,21 @@ export async function Init(repoPath: string): Promise<void> {
     const failure = await simpleGit()
         .env({ GIT_LFS_SKIP_SMUDGE: '1' }) // https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-faq.adoc?plain=1#L33-L35
         .clone(template, repo)
-        .then(Debug)
+        .then(debug)
         .then(() => null)
         .catch((e: Error) => {
-            Debug(e);
+            debug(e);
             return e;
         });
 
+    // set skip smudge for future ops
+    const cfg = join(repo, '.git', 'config');
+    Deno.writeTextFileSync(cfg, '\n[lfs]\n\tskipSmudge = true\n', { append: true });
+    debug(() => Deno.readTextFileSync(cfg));
+
     if (failure != null) {
-        if (failure instanceof GitConstructError) panic(`attention: invalid application state or git not on PATH`);
-        panic(`git clone failed: ${failure.message}`);
+        // if (failure instanceof GitConstructError) panic(`attention: invalid application state or git not on PATH`);
+        // panic(`git clone failed: ${failure.message}`);
     }
 
     // TODO:
@@ -56,7 +63,5 @@ export async function Init(repoPath: string): Promise<void> {
     const gitInRepo = simpleGit(repo);
     await gitInRepo.addRemote('upstream', 'https://github.com/USER/REPO.git');
 
-    // parse .INI at .lfsconfig for lfs.url
+    // parse .INI at .lfsconfig -> assert lfs.url
 }
-
-Init('/home/eissar/code/lfs-booru/libraries/new');

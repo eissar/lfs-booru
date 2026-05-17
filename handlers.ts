@@ -1,4 +1,8 @@
-import { PushImageToLFS } from './lfs.ts';
+import { LibraryConnection } from './library.ts';
+import { PutObjectContent } from '@/lfs/api.ts';
+import { Connection as BooruConn } from '@/lfs/api.ts';
+import { debug } from '@/logging.ts';
+import { simpleGit } from 'simple-git';
 
 // /** @description */
 type ImageState = {
@@ -50,6 +54,50 @@ export async function Index(): Promise<Response> {
     return new Response(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
+}
+
+const eventLogPath = 'events/2026-05.ndjson';
+
+export async function internalIngest(
+    bytes: Uint8Array<ArrayBuffer>,
+    lib: LibraryConnection,
+    conn: BooruConn,
+    e: Event,
+    size: number,
+) {
+    const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${e.oid}\nsize ${size}\n`;
+    // we can assume path/images, path/events exist
+
+    const lfsRes = await PutObjectContent(conn, e.oid, bytes);
+    debug(() => lfsRes.json());
+    if (!lfsRes.ok) {
+        return new Response(
+            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+        );
+    }
+
+    // we can assume path/images, path/events exist
+    await Deno.writeTextFile(e.path, pointer);
+
+    // add -> commit
+
+    // possibly throws:
+    // TaskConfigurationError, GitError, GitResponseError, GitConstructError, GitPluginError
+    const commitErr = await simpleGit(conn.repo)
+        .commit('booru: update log', e.path)
+        .then(debug)
+        .catch((err) =>
+            new Response(
+                JSON.stringify({
+                    error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+                {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' },
+                },
+            )
+        );
 }
 
 export async function Ingest(req: Request): Promise<Response> {
@@ -122,18 +170,17 @@ export async function Ingest(req: Request): Promise<Response> {
 
     const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 
-    const eventLogPath = 'events/2026-05.ndjson';
-
     await Deno.mkdir('images').catch(() => {}); // directory exists
     await Deno.writeTextFile(event.path, pointer);
 
-    const lfsRes = await PushImageToLFS(oid, bytes);
-    if (!lfsRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
+    // const lfsRes = await PutObjectContent(bytes, lib, conn, event);
+    // const lfsRes = await PutObjectContent(oid, bytes);
+    // if (!lfsRes.ok) {
+    //     return new Response(
+    //         JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
+    //         { status: 502, headers: { 'Content-Type': 'application/json' } },
+    //     );
+    // }
 
     // Optional for later:
     // const cmd = new Deno.Command('deno', {
