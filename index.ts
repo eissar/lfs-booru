@@ -1,9 +1,30 @@
-import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
+// TODO: remove
+// deno-lint-ignore-file no-unused-vars
+
+// import { join } from '@std/path/join';
 import { Index, Ingest } from './handlers.ts';
-import { FetchImageFromLFS } from './lfs.ts';
+// import { panic } from '@/util.ts';
+import { Connection as LfsConn, GetObjectContent } from '@/lfs/api.ts';
+
+import { LibraryConnection } from './library.ts';
+
+const LFS_SERVER = 'http://localhost:8080';
+
+const conn: LfsConn = {
+    url: LFS_SERVER,
+    auth: `Basic ${btoa('user:pass')}`,
+    user: 'USER',
+    repo: 'REPO',
+};
+
+//: Library
+const lib: LibraryConnection = {
+    path: '/home/eissar/code/lfs-booru/libraries/new/',
+};
 
 async function handler(req: Request): Promise<Response> {
     const url = new URL(req.url);
+
     console.log(
         `method=${req.method} path=${url.pathname} query=${url.search}`,
     );
@@ -11,11 +32,12 @@ async function handler(req: Request): Promise<Response> {
     // Route: Fetch the actual image data from LFS
     if (url.pathname.startsWith('/image/')) {
         const oid = url.pathname.split('/')[2];
-        return await FetchImageFromLFS(oid);
+        return await GetObjectContent(conn, oid);
     }
 
     if (url.pathname === '/') {
-        return await Index();
+        // if starting up -> return string 'indexing'
+        return Index();
     }
 
     if (url.pathname === '/ingest' && req.method === 'POST') {
@@ -24,5 +46,7 @@ async function handler(req: Request): Promise<Response> {
 
     return new Response('Not Found', { status: 404 });
 }
-console.log('Server running on http://localhost:8000');
-await serve(handler, { port: 8000 });
+
+if (import.meta.main) {
+    Deno.serve({ port: 8000 }, handler);
+}
