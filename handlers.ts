@@ -1,4 +1,4 @@
-import { LibraryConnection } from './library.ts';
+import { LibraryConnection } from '@/library.ts';
 import { PutObjectContent } from '@/lfs/api.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
 import { debug } from '@/logging.ts';
@@ -64,9 +64,8 @@ export async function internalIngest(
     conn: BooruConn,
     e: Event,
     size: number,
-) {
+): Promise<Response | void> {
     const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${e.oid}\nsize ${size}\n`;
-    // we can assume path/images, path/events exist
 
     const lfsRes = await PutObjectContent(conn, e.oid, bytes);
     debug(() => lfsRes.json());
@@ -77,30 +76,30 @@ export async function internalIngest(
         );
     }
 
-    // we can assume path/images, path/events exist
     await Deno.writeTextFile(e.path, pointer);
 
-    // add -> commit
+    await Deno.writeTextFile(
+        eventLogPath,
+        JSON.stringify(e) + '\n',
+        { append: true, create: true },
+    );
 
-    // possibly throws:
-    // TaskConfigurationError, GitError, GitResponseError, GitConstructError, GitPluginError
-    const commitErr = await simpleGit(conn.repo)
-        .commit('booru: update log', e.path)
-        .then(debug)
-        .catch((err) =>
-            new Response(
-                JSON.stringify({
-                    error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
-                }),
-                {
-                    status: 500,
-                    headers: { 'Content-Type': 'application/json' },
-                },
-            )
+    try {
+        await simpleGit(lib.path).commit(
+            `booru: add image ${e.id}`,
+            [e.path, eventLogPath],
         );
+    } catch (err) {
+        return new Response(
+            JSON.stringify({
+                error: `git commit failed: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+    }
 }
 
-export async function Ingest(req: Request): Promise<Response> {
+export async function Ingest(req: Request, lib: LibraryConnection, conn: BooruConn): Promise<Response> {
     const form = await req.formData();
 
     const file = form.get('image') as File | null;
@@ -168,71 +167,8 @@ export async function Ingest(req: Request): Promise<Response> {
         mtime,
     };
 
-    const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
-
-    await Deno.mkdir('images').catch(() => {}); // directory exists
-    await Deno.writeTextFile(event.path, pointer);
-
-    // const lfsRes = await PutObjectContent(bytes, lib, conn, event);
-    // const lfsRes = await PutObjectContent(oid, bytes);
-    // if (!lfsRes.ok) {
-    //     return new Response(
-    //         JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
-    //         { status: 502, headers: { 'Content-Type': 'application/json' } },
-    //     );
-    // }
-
-    // Optional for later:
-    // const cmd = new Deno.Command('deno', {
-    //     args: ['run', '--allow-read', '--allow-write', 'indexer.ts'],
-    // });
-    // const { success, stderr } = cmd.outputSync();
-    // if (!success) {
-    //     return new Response(
-    //         JSON.stringify({
-    //             error: `indexer failed: ${new TextDecoder().decode(stderr)}`,
-    //         }),
-    //         { status: 500, headers: { 'Content-Type': 'application/json' } },
-    //     );
-    // }
-
-    await Deno.mkdir('events').catch(() => {}); // directory exists
-    await Deno.writeTextFile(
-        eventLogPath,
-        JSON.stringify(event) + '\n',
-        { append: true, create: true },
-    );
-
-    const gitAdd = await new Deno.Command('git', {
-        args: ['add', '--', event.path, eventLogPath],
-    }).output();
-    if (!gitAdd.success) {
-        return new Response(
-            JSON.stringify({
-                error: `git add failed: ${new TextDecoder().decode(gitAdd.stderr)}`,
-            }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    const gitCommit = await new Deno.Command('git', {
-        args: [
-            'commit',
-            '-m',
-            `ingest: add image ${nextId}`,
-            '--',
-            event.path,
-            eventLogPath,
-        ],
-    }).output();
-    if (!gitCommit.success) {
-        return new Response(
-            JSON.stringify({
-                error: `git commit failed: ${new TextDecoder().decode(gitCommit.stderr)}`,
-            }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
+    const result = await internalIngest(bytes, lib, conn, event, size);
+    if (result) return result;
 
     return new Response(JSON.stringify({ id: nextId }), {
         status: 201,

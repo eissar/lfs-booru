@@ -41,7 +41,7 @@ async function handler(req: Request): Promise<Response> {
     }
 
     if (url.pathname === '/ingest' && req.method === 'POST') {
-        return await Ingest(req);
+        return await Ingest(req, lib, conn);
     }
 
     return new Response('Not Found', { status: 404 });
