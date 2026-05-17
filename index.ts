@@ -1,20 +1,18 @@
-// import { join } from '@std/path/join';
-import { handleIngest, handleRoot } from './handlers.ts';
-// import { panic } from '@/util.ts';
-import { Connection as LfsConn, GetObjectContent } from '@/lfs/api.ts';
+import { handleImage, handleIngest, handleRoot } from './handlers.ts';
+import { Connection as BooruConn } from '@/lfs/api.ts';
 
-import { LibraryConnection } from '@/library.ts';
+import { LibraryConnection as LibConn } from '@/library.ts';
 
 const LFS_SERVER = 'http://localhost:8080';
 
-const conn: LfsConn = {
+const conn: BooruConn = {
     url: LFS_SERVER,
     auth: `Basic ${btoa('user:pass')}`,
     user: 'USER',
     repo: 'REPO',
 };
 
-const lib: LibraryConnection = {
+const lib: LibConn = {
     path: '/home/eissar/code/lfs-booru/libraries/new/',
 };
 
@@ -27,13 +25,12 @@ async function handler(req: Request): Promise<Response> {
 
     // Route: Fetch the actual image data from LFS
     if (url.pathname.startsWith('/image/')) {
-        const oid = url.pathname.split('/')[2];
-        return await GetObjectContent(conn, oid);
+        return await handleImage(req, conn);
     }
 
     if (url.pathname === '/') {
         // if starting up -> return string 'indexing'
-        return handleRoot(lib);
+        return await handleRoot(lib);
     }
 
     if (url.pathname === '/ingest' && req.method === 'POST') {

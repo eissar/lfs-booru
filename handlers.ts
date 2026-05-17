@@ -1,5 +1,5 @@
 import { LibraryConnection } from '@/library.ts';
-import { PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
+import { GetObjectContent, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
 import { debug } from '@/logging.ts';
 import { dirname, join } from '@std/path';
@@ -50,8 +50,8 @@ export async function handleRoot(lib: LibraryConnection): Promise<Response> {
         </div>
       `).join('')
     }
-    </div>
-  `;
+    </div>`;
+
     return new Response(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
@@ -202,4 +202,10 @@ export async function handleIngest(req: Request, lib: LibraryConnection, conn: B
         status: 201,
         headers: { 'Content-Type': 'application/json' },
     });
+}
+
+export async function handleImage(req: Request, conn: BooruConn): Promise<Response> {
+    const url = new URL(req.url);
+    const oid = url.pathname.split('/')[2];
+    return await GetObjectContent(conn, oid);
 }
