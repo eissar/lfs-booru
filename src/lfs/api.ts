@@ -72,7 +72,7 @@ function objectUrl(conn: Connection, oid: string): URL {
 // - PUT
 //     - Upload/store raw object bytes (application/octet-stream) for that OID
 //     - Returns 200 on success, 404 if metadata for OID not found, 500 on store failure
-export async function PutObjectContent(conn: Connection, oid: string, body: BodyInit, h: HeadersInit) {
+export async function PutObjectContent(conn: Connection, oid: string, body: BodyInit, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -95,7 +95,7 @@ export async function PutObjectContent(conn: Connection, oid: string, body: Body
 
 // - GET
 //     - Accept: application/vnd.git-lfs+json → return JSON metadata (Representation) with hypermedia links
-export async function GetObjectMeta(conn: Connection, oid: string, h: HeadersInit) {
+export async function GetObjectMeta(conn: Connection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -127,7 +127,7 @@ export async function GetObjectContent(conn: Connection, oid: string, h?: Header
 // returns
 // {"oid":"b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","size":3574,"actions":{"download":{"href":"http://localhost:8080/objects/b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","header":{"Accept":"application/vnd.git-lfs"},"expires_at":"0001-01-01T00:00:00Z"}}}
 // useful for existence/range checks
-export async function HeadObjectMeta(conn: Connection, oid: string, h: HeadersInit) {
+export async function HeadObjectMeta(conn: Connection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
