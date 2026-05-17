@@ -28,7 +28,7 @@ type Event = {
     mtime: string;
 };
 
-export async function Index(lib: LibraryConnection): Promise<Response> {
+export async function handleRoot(lib: LibraryConnection): Promise<Response> {
     const state = JSON.parse(
         await Deno.readTextFile(join(lib.path, 'index/image_state.json')),
     ) as Record<string, ImageState>;
@@ -133,7 +133,7 @@ export async function internalIngest(
     if (gitCommitError) return gitCommitError;
 }
 
-export async function Ingest(req: Request, lib: LibraryConnection, conn: BooruConn): Promise<Response> {
+export async function handleIngest(req: Request, lib: LibraryConnection, conn: BooruConn): Promise<Response> {
     const form = await req.formData();
 
     const file = form.get('image') as File | null;

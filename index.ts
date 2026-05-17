@@ -1,8 +1,5 @@
-// TODO: remove
-// deno-lint-ignore-file no-unused-vars
-
 // import { join } from '@std/path/join';
-import { Index, Ingest } from './handlers.ts';
+import { handleIngest, handleRoot } from './handlers.ts';
 // import { panic } from '@/util.ts';
 import { Connection as LfsConn, GetObjectContent } from '@/lfs/api.ts';
 
@@ -17,7 +14,6 @@ const conn: LfsConn = {
     repo: 'REPO',
 };
 
-//: Library
 const lib: LibraryConnection = {
     path: '/home/eissar/code/lfs-booru/libraries/new/',
 };
@@ -37,11 +33,11 @@ async function handler(req: Request): Promise<Response> {
 
     if (url.pathname === '/') {
         // if starting up -> return string 'indexing'
-        return Index(lib);
+        return handleRoot(lib);
     }
 
     if (url.pathname === '/ingest' && req.method === 'POST') {
-        return await Ingest(req, lib, conn);
+        return await handleIngest(req, lib, conn);
     }
 
     return new Response('Not Found', { status: 404 });
