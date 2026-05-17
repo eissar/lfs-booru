@@ -11,5 +11,19 @@
         "indentWidth": 4,
         "singleQuote": true,
         "proseWrap": "preserve"
+    },
+    "imports": {
+        "@std/path": "jsr:@std/path@1.1.4",
+        "simple-git": "npm:simple-git@3.36.0",
+        "@/": "./"
+    },
+    "lint": {
+        "options": {
+            "no-import-prefix": {
+                "allow": [ "jsr:" ]
+            }
+        }
     }
+
 }
+
