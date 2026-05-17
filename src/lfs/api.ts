@@ -1,5 +1,5 @@
 export const LFS_MEDIA_TYPE = 'application/vnd.git-lfs+json';
-export const LFS_CONTENT_MEDIA_TYPE = 'application/octet-stream';
+export const LFS_CONTENT_MEDIA_TYPE = 'application/vnd.git-lfs';
 
 export type Connection = {
     url: string;
@@ -62,15 +62,34 @@ export type UploadInput = UploadMetaInput & {
     body: BodyInit;
 };
 
-function objectUrl(conn: Connection, oid: string): URL {
+function objectsUrl(conn: Connection): URL {
     if (conn.user !== '' || conn.repo !== '') {
         const prefix = `/${encodeURIComponent(conn.user)}/${encodeURIComponent(conn.repo)}`;
-        return new URL(`${prefix}/objects/${encodeURIComponent(oid)}`, conn.url);
+        return new URL(`${prefix}/objects`, conn.url);
     }
-    return new URL(`objects/${encodeURIComponent(oid)}`, conn.url);
+    return new URL('objects', conn.url);
 }
+
+function objectUrl(conn: Connection, oid: string): URL {
+    return new URL(`${objectsUrl(conn).pathname}/${encodeURIComponent(oid)}`, conn.url);
+}
+export async function PutObjectMeta(conn: Connection, oid: string, size: number, h?: HeadersInit) {
+    const url = objectsUrl(conn);
+
+    const requestHeaders = new Headers(h);
+    requestHeaders.set('Content-Type', LFS_MEDIA_TYPE);
+    requestHeaders.set('Accept', LFS_MEDIA_TYPE);
+    requestHeaders.set('Authorization', conn.auth);
+
+    return fetch(url, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify({ oid, size }),
+    });
+}
+
 // - PUT
-//     - Upload/store raw object bytes (application/octet-stream) for that OID
+//     - Upload/store raw object bytes for that OID
 //     - Returns 200 on success, 404 if metadata for OID not found, 500 on store failure
 export async function PutObjectContent(conn: Connection, oid: string, body: BodyInit, h?: HeadersInit) {
     const url = objectUrl(conn, oid);

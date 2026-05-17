@@ -6,7 +6,7 @@ import { Index, Ingest } from './handlers.ts';
 // import { panic } from '@/util.ts';
 import { Connection as LfsConn, GetObjectContent } from '@/lfs/api.ts';
 
-import { LibraryConnection } from './library.ts';
+import { LibraryConnection } from '@/library.ts';
 
 const LFS_SERVER = 'http://localhost:8080';
 
@@ -37,7 +37,7 @@ async function handler(req: Request): Promise<Response> {
 
     if (url.pathname === '/') {
         // if starting up -> return string 'indexing'
-        return Index();
+        return Index(lib);
     }
 
     if (url.pathname === '/ingest' && req.method === 'POST') {

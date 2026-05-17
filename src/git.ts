@@ -1,5 +1,5 @@
 import { fromFileUrl, join, resolve } from '@std/path';
-import { GitConstructError, simpleGit } from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { debug } from '@/logging.ts';
 import { panic } from '@/util.ts';
 
@@ -11,27 +11,21 @@ import { panic } from '@/util.ts';
 const TEMPLATE = fromFileUrl(new URL('../libraries/template', import.meta.url));
 
 /**
- * @throws Error,GitError,GitConstructError
- *
  * Idempotently initialize a booru library repo by cloning ./libraries/template.
+ *
+ * @panics if TEMPLATE cannot be resolved
+ * @returns `null` on success, or `Error` when clone fails.
+ * @throws Error, GitError, GitConstructError from simpleGit
  *
  * This intentionally does not call `git lfs ...` and does not edit .git/config.
  * `git clone` will create .git/config as normal Git repository metadata, but this
  * function does not write local Git config settings after cloning.
  */
-export async function Init(repoPath: string): Promise<void> {
+export async function Init(repoPath: string): Promise<null | Error> {
     // TODO: MustResolve(TEMPLATE) at startup?
     const template = await Deno.realPath(TEMPLATE).catch((e: Error) => panic(e.message));
 
     const repo = resolve(repoPath);
-
-    // const stat = await Deno.stat(repo);
-    // if (!stat.isDirectory) {
-    //     throw new Error(`Path is not a directory: ${repo}`);
-    // }
-    // for await (const _dirEntry of Deno.readDir(repo)) {
-    //     throw new Error(`Path must be empty`); // if there is a _dirEntry it isn't empty
-    // }
 
     // pass deno env like?
     // .env({ ...Deno.env.toObject(), GIT_LFS_SKIP_SMUDGE: '1' })
@@ -40,20 +34,24 @@ export async function Init(repoPath: string): Promise<void> {
         .clone(template, repo)
         .then(debug)
         .then(() => null)
-        .catch((e: Error) => {
+        .catch((e) => {
             debug(e);
             return e;
         });
 
+    if (failure != null) {
+        return failure;
+    }
+
     // set skip smudge for future ops
     const cfg = join(repo, '.git', 'config');
-    Deno.writeTextFileSync(cfg, '\n[lfs]\n\tskipSmudge = true\n', { append: true });
-    debug(() => Deno.readTextFileSync(cfg));
+    await Deno.writeTextFile(cfg, '\n[lfs]\n\tskipSmudge = true\n', { append: true })
+        .catch((e) => {
+            debug(e);
+            return e;
+        });
 
-    if (failure != null) {
-        // if (failure instanceof GitConstructError) panic(`attention: invalid application state or git not on PATH`);
-        // panic(`git clone failed: ${failure.message}`);
-    }
+    debug(() => Deno.readTextFileSync(cfg));
 
     // TODO:
     // The template repo does not have an upstream remote. we set
@@ -64,4 +62,6 @@ export async function Init(repoPath: string): Promise<void> {
     await gitInRepo.addRemote('upstream', 'https://github.com/USER/REPO.git');
 
     // parse .INI at .lfsconfig -> assert lfs.url
+    // parse gitconfig -> assert lfs.skipSmudge
+    return null;
 }
