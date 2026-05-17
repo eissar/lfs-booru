@@ -29,30 +29,35 @@ export type JsonFileIndexStoreOptions = {
 };
 
 // TODO: remove class and do like this
-//
-// const store: DerivedIndexStore = {
-//     async getCursor() {
-//         return null;
-//     },
-//
-//     async getImage(id) {
-//         return null;
-//     },
-//
-//     async getIdByOid(oid) {
-//         return null;
-//     },
-//
-//     async applyEvent(event, nextCursor) {},
-//
-//     async *listImages(options) {
-//         yield ['id1', {} as ImageState];
-//     },
-//
-//     async close() {},
-// };
+/** @param {LibraryConnection} conn - reference */
+function JsonFileIndexStore(
+    conn: LibraryConnection,
+): DerivedIndexStore {
+    return {
+        async getCursor() {
+            return null;
+            Atomics;
+        },
 
-export class JsonFileIndexStore implements DerivedIndexStore {
+        async getImage(id) {
+            return null;
+        },
+
+        async getIdByOid(oid) {
+            return null;
+        },
+
+        async applyEvent(event, nextCursor) {},
+
+        async *listImages(options) {
+            yield ['id1', {} as ImageState];
+        },
+
+        async close() {},
+    };
+}
+
+export class JsonFileIndexStorev0 implements DerivedIndexStore {
     #imageStatePath: string;
     #tagIndexPath: string;
     #cursorPath: string;
