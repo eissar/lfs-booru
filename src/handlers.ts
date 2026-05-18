@@ -57,13 +57,6 @@ export async function handleRoot(lib: LibraryConnection): Promise<Response> {
     });
 }
 
-// TODO: locale/tz handling via pref or something
-function getCurrentYearMonth(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-}
 const eventLogPath = 'events/2026-05.ndjson';
 
 export async function internalIngest(
