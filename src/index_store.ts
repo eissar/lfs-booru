@@ -34,101 +34,98 @@ export interface DerivedIndexStore {
 
 const mu = new Mutex();
 
-/** @param {LibraryConnection} conn - reference */
-export async function JsonFileIndexStore(
-    conn: LibraryConnection,
-): Promise<DerivedIndexStore> {
-    const cursorPath = join(conn.path, 'event_cursor');
-    let cursorCache = await readJsonFile(cursorPath, () => null as IndexCursor | null);
+export class JsonFileIndexStore implements DerivedIndexStore {
+    conn: LibraryConnection;
+    constructor(conn: LibraryConnection) {
+        this.conn = conn;
+    }
 
-    // write to cursor last
-    // await writeJsonFile(cursorPath, nextCursor);
-    // cursorCache = nextCursor;
-    return {
-        getCursor(): IndexCursor | null {
-            // we do not need to use the mutex
-            // using _lock = await mu.acquire();
-            return cursorCache;
-        },
-        async saveCursor(c: IndexCursor): Promise<void> {
+    cursorCache: IndexCursor | null = null;
+
+    getCursor(): IndexCursor | null {
+        // we do not need to use the mutex
+        // using _lock = await mu.acquire();
+        return this.cursorCache;
+    }
+
+    async saveCursor(c: IndexCursor): Promise<void> {
+        using _lock = await mu.acquire();
+
+        const cursorPath = join(this.conn.path, 'event_cursor');
+        await writeJsonFile(cursorPath, c);
+        this.cursorCache = c;
+    }
+
+    async getImage(id: string): Promise<ImageState | null> {
+        using _lock = await mu.acquire();
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+
+        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        return imageState[id] ?? null;
+    }
+
+    async getIdByOid(oid: string): Promise<string | null> {
+        using _lock = await mu.acquire();
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+        // const cursorPath = join(this.conn.path, 'event_cursor');
+
+        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+
+        for (const [id, image] of Object.entries(imageState)) {
+            if (image.oid === oid) return id;
+        }
+        return null;
+    }
+
+    // → store applies event to imageState
+    // → store writes imageState
+    // → store writes nextCursor
+    async applyEvent(event: Event, nextCursor: IndexCursor): Promise<void> {
+        using _lock = await mu.acquire();
+
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+        const indexPath = join(this.conn.path, 'index', 'tag_index.json');
+        const cursorPath = join(this.conn.path, 'event_cursor');
+
+        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+        applyEvent(imageState, tagIndex, event);
+
+        // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
+        // then state and tag index are made inconsistent
+        await writeJsonFile(statePath, imageState);
+        await writeJsonFile(indexPath, tagIndex);
+
+        // TODO: this.saveCursor
+        // write to cursor last
+        await writeJsonFile(cursorPath, nextCursor);
+        this.cursorCache = nextCursor;
+    }
+
+    async *listImages(options: { limit?: number } = {}): AsyncIterable<[string, ImageState]> {
+        let entries: [string, ImageState][];
+
+        {
             using _lock = await mu.acquire();
-
-            const cursorPath = join(conn.path, 'event_cursor');
-            await writeJsonFile(cursorPath, c);
-            cursorCache = c;
-        },
-
-        async getImage(id: string): Promise<ImageState | null> {
-            using _lock = await mu.acquire();
-            const statePath = join(conn.path, 'index', 'image_state.json');
-
+            const statePath = join(this.conn.path, 'index', 'image_state.json');
             const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-            return imageState[id] ?? null;
-        },
+            entries = Object.entries(imageState);
+        }
 
-        async getIdByOid(oid: string): Promise<string | null> {
-            using _lock = await mu.acquire();
-            const statePath = join(conn.path, 'index', 'image_state.json');
-            // const cursorPath = join(conn.path, 'event_cursor');
+        const limit = options.limit ?? Infinity;
+        if (limit <= 0) return;
 
-            const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        let yielded = 0;
+        for (const entry of entries) {
+            yield entry;
+            yielded++;
+            if (yielded >= limit) return;
+        }
+    }
 
-            for (const [id, image] of Object.entries(imageState)) {
-                if (image.oid === oid) return id;
-            }
-            return null;
-        },
-
-        // → store applies event to imageState
-        // → store writes imageState
-        // → store writes nextCursor
-        async applyEvent(event: Event, nextCursor: IndexCursor): Promise<void> {
-            using _lock = await mu.acquire();
-
-            const statePath = join(conn.path, 'index', 'image_state.json');
-            const indexPath = join(conn.path, 'index', 'tag_index.json');
-            const cursorPath = join(conn.path, 'event_cursor');
-
-            const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-            const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
-            applyEvent(imageState, tagIndex, event);
-
-            // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
-            // then state and tag index are made inconsistent
-            await writeJsonFile(statePath, imageState);
-            await writeJsonFile(indexPath, tagIndex);
-
-            // TODO: this.saveCursor
-            // write to cursor last
-            await writeJsonFile(cursorPath, nextCursor);
-            cursorCache = nextCursor;
-        },
-
-        async *listImages(options: { limit?: number } = {}): AsyncIterable<[string, ImageState]> {
-            let entries: [string, ImageState][];
-
-            {
-                using _lock = await mu.acquire();
-                const statePath = join(conn.path, 'index', 'image_state.json');
-                const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-                entries = Object.entries(imageState);
-            }
-
-            const limit = options.limit ?? Infinity;
-            if (limit <= 0) return;
-
-            let yielded = 0;
-            for (const entry of entries) {
-                yield entry;
-                yielded++;
-                if (yielded >= limit) return;
-            }
-        },
-
-        close(): void {
-            // JsonFileIndexStore does not hold open resources.
-        },
-    };
+    close(): void {
+        // JsonFileIndexStore does not hold open resources.
+    }
 }
 
 async function readJsonFile<T>(path: string, fallback: () => T): Promise<T> {

@@ -1,5 +1,6 @@
 import { join } from '@std/path';
 import type { DerivedIndexStore, IndexCursor } from '@/index_store.ts';
+import { JsonFileIndexStore } from '@/index_store.ts';
 import { LibraryConnection } from '@/library.ts';
 import { TextLineStream } from '@std/streams';
 
@@ -215,7 +216,6 @@ if (import.meta.main) {
         path: Deno.args[0] ?? join(import.meta.dirname ?? Deno.cwd(), 'libraries/new'),
     };
 
-    const { JsonFileIndexStore } = await import('./src/index_store.ts');
-    const store = await JsonFileIndexStore(conn);
+    const store = new JsonFileIndexStore(conn);
     await processEvents(conn, store);
 }
