@@ -1,4 +1,4 @@
-> Last updated at HASH:5b7a8692e75edd5469e2d5b148aabf955d08331d
+> Last updated at HASH:14a29bcb672e2dffa8c7583168ac27000baa3b0f
 
 # Current Project State
 
@@ -18,14 +18,14 @@ Hardcoded runtime config in `server.ts`:
 
 ```ts
 const conn = {
-  url: 'http://localhost:8080',
-  auth: `Basic ${btoa('user:pass')}`,
-  user: 'USER',
-  repo: 'REPO',
+    url: 'http://localhost:8080',
+    auth: `Basic ${btoa('user:pass')}`,
+    user: 'USER',
+    repo: 'REPO',
 };
 
 const lib = {
-  path: '/home/eissar/code/lfs-booru/libraries/new/',
+    path: '/home/eissar/code/lfs-booru/libraries/new/',
 };
 ```
 
@@ -42,31 +42,30 @@ const lib = {
 
 Routes:
 
+- `/image/:oid` (any method) -> `handleImage(req, conn)`
 - `GET /` -> `handleRoot(lib)`
-- `GET /image/:oid` -> `handleImage(req, conn)`
 - `POST /ingest` -> `handleIngest(req, lib, conn)`
 - all other routes -> `404 Not Found`
 
 Startup behavior:
 
-- creates `JsonFileIndexStore`
-- computes `indexFlag`, but the current promise chain resolves to `true` even when `index/image_state.json` exists
-- calls `processEvents(lib, store)` when `indexFlag` is true
-- does not `await` `processEvents` before starting `Deno.serve`
+- checks for `index/image_state.json` under the library
+- if missing, logs an initialization message and runs `processEvents(lib, store)`
+- `processEvents` is awaited before `Deno.serve`
 
 ## Ingest + Gallery Handlers (`src/handlers.ts`)
 
 ### `handleRoot(lib)`
 
 - reads `lib.path/index/image_state.json`
-- renders HTML cards with image metadata
+- renders HTML cards with image metadata (`name`, `tags`, `width`, `height`)
 - image bytes are fetched via `/image/{oid}`
 
 ### `handleIngest(req, lib, conn)`
 
 - expects multipart field `image`
 - computes SHA-256 OID for uploaded bytes
-- deduplicates by scanning `index/image_state.json` OIDs
+- deduplicates by scanning `index/image_state.json` OIDs (falls back to `{}` when absent)
 - optional form fields: `name`, `tags` (JSON array string), `width`, `height`, `mtime`
 - creates an `add` event with path `images/{id}.png`
 - calls `internalIngest`
@@ -183,15 +182,20 @@ Purpose:
 
 ## Library Directories (`libraries/`)
 
-`libraries/` is ignored by root `.gitignore`, and currently contains:
+`libraries/` is ignored by root `.gitignore`, and contains:
 
-- `template/`: baseline LFS-enabled repo skeleton (`images/`, `events/`, `index/` with `.gitkeep`)
+- `template/`: baseline LFS-enabled repo skeleton (`images/`, `events/`, `index/` with `.gitkeep`), plus `.lfsconfig` with:
+  - `lfs.url = http://localhost:8080`
+  - `lfs.fetchexclude = *`
 - `new/`: local working library with:
   - pointer files `images/1.png`..`images/5.png`
   - `events/2026-05.ndjson`
   - `index/image_state.json`, `index/tag_index.json`
   - `event_cursor`
+  - `.lfsconfig` with `lfs.url` and `lfs.fetchexclude = *`
 - `inspiration/`: local library containing a real image file at `images/1.png`
+
+Each library directory is also a Git repository with local `.git/` metadata.
 
 ## Other Source Files
 
@@ -201,28 +205,14 @@ Purpose:
 
 ## Repository Docs and Planning Files
 
-- `readme.md`: architecture notes and ingest caveats
+- `readme.md`: architecture notes for an event-log/Git-LFS booru design
 - `DESIGN.md`: error-handling and TypeScript API design principles
 - `PLANNED.md` and `todo`: planned work items
 
-## Verification Snapshot
-
-Succeeded in this working tree:
-
-```bash
-deno check server.ts indexer.ts src/handlers.ts src/git.ts src/test_InitWith5Images.ts
-deno run --allow-all indexer.ts
-timeout 2s deno task run
-```
-
-`timeout 2s deno task run` starts the server and exits via timeout (code 124).
-
 ## Observed Constraints in Code
 
-- Server, library path, and LFS connection are hardcoded.
-- Ingest appends only to `events/2026-05.ndjson`.
-- Ingest dedupe depends on `index/image_state.json`.
-- Startup indexing is invoked without `await`.
-- `indexFlag` logic in `server.ts` resolves to `true` with the current promise chain.
-- `handleRoot` assumes `index/image_state.json` exists and does not provide a fallback.
-- Gallery HTML is string-built and unescaped.
+- server config, library path, and LFS connection are hardcoded
+- ingest appends only to `events/2026-05.ndjson`
+- ingest dedupe depends on `index/image_state.json`
+- `handleRoot` expects `index/image_state.json` and has no fallback response when missing
+- gallery HTML is string-built and unescaped
