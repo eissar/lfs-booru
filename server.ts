@@ -69,9 +69,8 @@ async function Start(port: number = 8000) {
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
 
     debug(`indexFlag=${indexFlag} IndexStoreBackend=${store.constructor.name}`);
-    if (indexFlag) {
-        processEvents(lib, store);
-    }
+    if (indexFlag) await processEvents(lib, store);
+
     Deno.serve({ port }, handler);
 }
 
