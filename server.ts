@@ -54,8 +54,8 @@ async function Start(port: number = 8000) {
     const indexFlag = await Deno.stat(join(lib.path, 'index', 'image_state.json'))
         .then((a) => {
             if (a.isFile) return false;
+            return true; //invalid
         })
-        .then(() => true)
         .catch((e) => {
             if (!(e instanceof Deno.errors.NotFound)) debug(e);
             console.log('Missing indexed artifacts');
