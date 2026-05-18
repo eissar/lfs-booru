@@ -2,6 +2,7 @@ import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
+import { debug } from '@/logging.ts';
 
 const LFS_SERVER = 'http://localhost:8080';
 
@@ -41,5 +42,6 @@ async function handler(req: Request): Promise<Response> {
 }
 
 if (import.meta.main) {
+    debug(['Using library:', lib.path]);
     Deno.serve({ port: 8000 }, handler);
 }
