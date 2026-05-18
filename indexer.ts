@@ -1,5 +1,7 @@
 import { join } from '@std/path';
+import type { DerivedIndexStore, IndexCursor } from '@/index_store.ts';
 import { LibraryConnection } from '@/library.ts';
+import { TextLineStream } from '@std/streams';
 
 export type ImageState = {
     oid: string;
@@ -61,12 +63,12 @@ function removeFromTag(tagIndex: TagIndex, tag: string, id: string): void {
     if (tagIndex[tag].length === 0) delete tagIndex[tag];
 }
 
-function addToTag(tagIndex: TagIndex, tag: string, id: string): void {
+export function addToTag(tagIndex: TagIndex, tag: string, id: string): void {
     tagIndex[tag] ??= [];
     if (!tagIndex[tag].includes(id)) tagIndex[tag].push(id);
 }
 
-function applyEvent(imageState: ImageStateIndex, tagIndex: TagIndex, event: Event): void {
+export function applyEvent(imageState: ImageStateIndex, tagIndex: TagIndex, event: Event): void {
     const id = String(event.id);
 
     switch (event.op) {
@@ -114,45 +116,90 @@ function applyEvent(imageState: ImageStateIndex, tagIndex: TagIndex, event: Even
     }
 }
 
-export async function processEvents(conn: LibraryConnection): Promise<IndexResult> {
-    const imageState: ImageStateIndex = {};
-    const tagIndex: TagIndex = {};
-    let eventCount = 0;
-
-    const eventEntries = [];
+// we process events from the
+// sharded events log at eventsDir
+export async function processEvents(
+    conn: LibraryConnection,
+    store: DerivedIndexStore,
+): Promise<IndexResult> {
+    const eventShards: string[] = [];
     await Deno.mkdir(join(conn.path, indexDir), { recursive: true });
 
-    try {
-        for await (const entry of Deno.readDir(join(conn.path, eventsDir))) {
-            if (entry.isFile && entry.name.endsWith('.ndjson')) eventEntries.push(entry.name);
+    // TODO: refac
+    const entries = await Array.fromAsync(Deno.readDir(join(conn.path, eventsDir)))
+        .catch((e) => {
+            if (e instanceof Deno.errors.NotFound) return []; // Return empty array to skip loop
+            throw e; // Bubble up unexpected errors
+        });
+
+    for (const s of entries) {
+        if (s.isFile && s.name.endsWith('.ndjson')) {
+            eventShards.push(s.name);
         }
-    } catch (e) {
-        if (!(e instanceof Deno.errors.NotFound)) throw e;
     }
 
-    eventEntries.sort();
-    for (const eventFile of eventEntries) {
-        const content = await Deno.readTextFile(join(conn.path, eventsDir, eventFile));
-        for (const line of content.trim().split('\n')) {
-            if (!line) continue;
-            applyEvent(imageState, tagIndex, JSON.parse(line) as Event);
+    eventShards.sort();
+
+    const resumeCursor = store.getCursor();
+    let eventCount = 0;
+    let imageCount = 0;
+    let tagCount = 0;
+    const encoder = new TextEncoder();
+
+    for (const shard of eventShards) {
+        if (resumeCursor && shard < resumeCursor.eventFile) continue;
+
+        const shardPath = join(conn.path, eventsDir, shard);
+        // const file = await Deno.open(shardPath, { read: true });
+        await using file = await Deno.open(shardPath, { read: true });
+
+        const lineStream = file.readable
+            .pipeThrough(new TextDecoderStream())
+            .pipeThrough(new TextLineStream());
+
+        let byteOffset = 0;
+
+        if (resumeCursor && shard === resumeCursor.eventFile) {
+            await file.seek(resumeCursor.byteOffset, Deno.SeekMode.Start);
+            byteOffset = resumeCursor.byteOffset;
+        }
+
+        for await (const line of lineStream) {
+            const lineBytes = encoder.encode(line).length + 1;
+            const nextByteOffset = byteOffset + lineBytes;
+            const cursor: IndexCursor = {
+                eventFile: shard,
+                byteOffset: nextByteOffset,
+            };
+
+            const event = JSON.parse(line) as Event;
+            // apply and write event_cursor
+            await store.applyEvent(event, cursor);
             eventCount++;
+
+            byteOffset = nextByteOffset;
         }
     }
 
-    await Deno.writeTextFile(
-        join(conn.path, indexDir, 'image_state.json'),
-        JSON.stringify(imageState),
-    );
-    await Deno.writeTextFile(
-        join(conn.path, indexDir, 'tag_index.json'),
-        JSON.stringify(tagIndex),
-    );
+    // Read final counts from the store's files for reporting
+    const statePath = join(conn.path, indexDir, 'image_state.json');
+    const tagPath = join(conn.path, indexDir, 'tag_index.json');
 
-    const result = {
-        images: Object.keys(imageState).length,
-        tags: Object.keys(tagIndex).length,
-        eventFiles: eventEntries.length,
+    try {
+        imageCount = Object.keys(JSON.parse(await Deno.readTextFile(statePath))).length;
+    } catch {
+        // store may not have written anything yet
+    }
+    try {
+        tagCount = Object.keys(JSON.parse(await Deno.readTextFile(tagPath))).length;
+    } catch {
+        // store may not have written anything yet
+    }
+
+    const result: IndexResult = {
+        images: imageCount,
+        tags: tagCount,
+        eventFiles: eventShards.length,
         events: eventCount,
     };
 
@@ -168,5 +215,7 @@ if (import.meta.main) {
         path: Deno.args[0] ?? join(import.meta.dirname ?? Deno.cwd(), 'libraries/new'),
     };
 
-    await processEvents(conn);
+    const { JsonFileIndexStore } = await import('./src/index_store.ts');
+    const store = await JsonFileIndexStore(conn);
+    await processEvents(conn, store);
 }

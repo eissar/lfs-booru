@@ -1,4 +1,5 @@
 import { dirname, join } from '@std/path';
+import { applyEvent } from '../indexer.ts';
 import type { Event, ImageState, ImageStateIndex, TagIndex } from '../indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
@@ -18,10 +19,12 @@ export type IndexCursor = {
 
 export interface DerivedIndexStore {
     getCursor(): IndexCursor | null;
+    saveCursor(c: IndexCursor): Promise<void>;
 
     getImage(id: string): Promise<ImageState | null>;
     getIdByOid(oid: string): Promise<string | null>;
 
+    /** apply and write event_cursor */
     applyEvent(event: Event, nextCursor: IndexCursor): Promise<void>;
 
     listImages(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
@@ -38,11 +41,21 @@ export async function JsonFileIndexStore(
     const cursorPath = join(conn.path, 'event_cursor');
     let cursorCache = await readJsonFile(cursorPath, () => null as IndexCursor | null);
 
+    // write to cursor last
+    // await writeJsonFile(cursorPath, nextCursor);
+    // cursorCache = nextCursor;
     return {
         getCursor(): IndexCursor | null {
             // we do not need to use the mutex
             // using _lock = await mu.acquire();
             return cursorCache;
+        },
+        async saveCursor(c: IndexCursor): Promise<void> {
+            using _lock = await mu.acquire();
+
+            const cursorPath = join(conn.path, 'event_cursor');
+            await writeJsonFile(cursorPath, c);
+            cursorCache = c;
         },
 
         async getImage(id: string): Promise<ImageState | null> {
@@ -77,12 +90,15 @@ export async function JsonFileIndexStore(
             const cursorPath = join(conn.path, 'event_cursor');
 
             const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-            applyEventToImageState(imageState, event);
+            const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+            applyEvent(imageState, tagIndex, event);
 
             // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
             // then state and tag index are made inconsistent
             await writeJsonFile(statePath, imageState);
-            await writeJsonFile(indexPath, buildTagIndex(imageState));
+            await writeJsonFile(indexPath, tagIndex);
+
+            // TODO: this.saveCursor
             // write to cursor last
             await writeJsonFile(cursorPath, nextCursor);
             cursorCache = nextCursor;
@@ -113,52 +129,6 @@ export async function JsonFileIndexStore(
             // JsonFileIndexStore does not hold open resources.
         },
     };
-}
-
-function applyEventToImageState(imageState: ImageStateIndex, event: Event): void {
-    const id = String(event.id);
-
-    switch (event.op) {
-        case 'add':
-            imageState[id] = {
-                oid: event.oid,
-                path: event.path,
-                tags: [...(event.tags ?? [])],
-                width: event.width,
-                height: event.height,
-                name: event.name,
-                mtime: event.mtime,
-            };
-            break;
-        case 'tag_add': {
-            const image = imageState[id];
-            if (!image) break;
-            if (!image.tags.includes(event.tag)) image.tags.push(event.tag);
-            break;
-        }
-        case 'tag_remove': {
-            const image = imageState[id];
-            if (!image) break;
-            image.tags = image.tags.filter((tag) => tag !== event.tag);
-            break;
-        }
-        case 'delete':
-            delete imageState[id];
-            break;
-    }
-}
-
-function buildTagIndex(imageState: ImageStateIndex): TagIndex {
-    const tagIndex: TagIndex = {};
-
-    for (const [id, image] of Object.entries(imageState)) {
-        for (const tag of image.tags) {
-            tagIndex[tag] ??= [];
-            if (!tagIndex[tag].includes(id)) tagIndex[tag].push(id);
-        }
-    }
-
-    return tagIndex;
 }
 
 async function readJsonFile<T>(path: string, fallback: () => T): Promise<T> {
