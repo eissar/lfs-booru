@@ -14,16 +14,10 @@
     },
     "imports": {
         "@std/path": "jsr:@std/path@1.1.4",
+        "@std/async": "jsr:@std/async@1.3.0",
+        "@core/asyncutil": "jsr:@core/asyncutil",
         "simple-git": "npm:simple-git@3.36.0",
         "@/": "./src/"
-    },
-    "lint": {
-        "options": {
-            "no-import-prefix": {
-                "allow": [ "jsr:" ]
-            }
-        }
     }
-
 }
 
