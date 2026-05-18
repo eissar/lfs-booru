@@ -1,6 +1,6 @@
 import { dirname, join } from '@std/path';
-import { applyEvent } from '../indexer.ts';
-import type { Event, ImageState, ImageStateIndex, TagIndex } from '../indexer.ts';
+import { applyEvent } from '@/indexer.ts';
+import type { Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 
@@ -21,6 +21,21 @@ export interface DerivedIndexStore {
     getCursor(): IndexCursor | null;
     saveCursor(c: IndexCursor): Promise<void>;
 
+    /**
+     * Return whether the derived index backend has all required artifacts.
+     *
+     * @returns `true` when the store can serve derived-index reads, otherwise `false`.
+     *
+     * @example Check startup readiness
+     * ```ts ignore
+     * import { assertEquals } from '@std/assert';
+     *
+     * const ready = await store.isInitialized();
+     * assertEquals(ready, true);
+     * ```
+     */
+    isInitialized(): Promise<boolean>;
+
     getImage(id: string): Promise<ImageState | null>;
     getIdByOid(oid: string): Promise<string | null>;
 
@@ -28,6 +43,22 @@ export interface DerivedIndexStore {
     applyEvent(event: Event, nextCursor: IndexCursor): Promise<void>;
 
     listImages(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
+
+    /**
+     * Return aggregate counts for derived index records.
+     *
+     * @returns Number of indexed images and distinct tags
+     *
+     * @example Read store statistics
+     * ```ts ignore
+     * import { assertEquals } from '@std/assert';
+     *
+     * const { images, tags } = await store.stats();
+     * assertEquals(typeof images, 'number');
+     * assertEquals(typeof tags, 'number');
+     * ```
+     */
+    stats(): Promise<{ images: number; tags: number }>;
 
     close(): Promise<void> | void;
 }
@@ -54,6 +85,18 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const cursorPath = join(this.conn.path, 'event_cursor');
         await writeJsonFile(cursorPath, c);
         this.cursorCache = c;
+    }
+
+    async isInitialized(): Promise<boolean> {
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+        const tagPath = join(this.conn.path, 'index', 'tag_index.json');
+
+        return await Promise.all([Deno.stat(statePath), Deno.stat(tagPath)])
+            .then(([stateStat, tagStat]) => stateStat.isFile && tagStat.isFile)
+            .catch((error) => {
+                if (error instanceof Deno.errors.NotFound) return false;
+                throw error;
+            });
     }
 
     async getImage(id: string): Promise<ImageState | null> {
@@ -121,6 +164,21 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             yielded++;
             if (yielded >= limit) return;
         }
+    }
+
+    async stats(): Promise<{ images: number; tags: number }> {
+        using _lock = await mu.acquire();
+
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+        const indexPath = join(this.conn.path, 'index', 'tag_index.json');
+
+        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+
+        return {
+            images: Object.keys(imageState).length,
+            tags: Object.keys(tagIndex).length,
+        };
     }
 
     close(): void {
