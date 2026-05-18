@@ -1,20 +1,39 @@
-> Last updated at HASH:14a29bcb672e2dffa8c7583168ac27000baa3b0f
+> Snapshot commit: HASH:6c4c6e36f8aac6296c0716c95bfce4289666a711
 
-# Current Project State
+# Codebase Snapshot
 
-## Runtime Shape
+## Purpose
 
-This is a Deno-based booru prototype with:
+A Deno-based booru (image gallery) prototype that stores images in Git LFS and tracks
+metadata through append-only NDJSON event logs. Indexes are derived from event replay
+and treated as disposable materialized views.
 
-- one HTTP server entrypoint (`server.ts`)
-- image ingest and gallery handlers (`src/handlers.ts`)
-- a Git LFS HTTP wrapper (`src/lfs/api.ts`)
-- append-only NDJSON event logs under `events/`
-- derived indexes under `index/`
-- one JSON-file index store backend (`JsonFileIndexStore`)
-- one local library path hardcoded to `libraries/new/`
+## Runtime Entry Points
 
-Hardcoded runtime config in `server.ts`:
+- **`server.ts`** — HTTP server on port 8000. On startup, checks for
+  `index/image_state.json`; if absent, runs `processEvents` to rebuild indexes from
+  the event log before beginning to serve requests.
+- **`indexer.ts`** — CLI indexer that replays event shards into derived indexes.
+  Invoked programmatically by `server.ts` at startup, or standalone:
+  `deno run --allow-all indexer.ts [library-path]`. Defaults to `libraries/new`.
+- **`scripts/dump_types.ts`** — TypeScript type-dump utility that prints the public
+  type and function surface of `src/` using the TypeScript compiler API.
+- **`scripts/read_json_sync_bench.ts`** — Deno benchmark measuring sync JSON
+  read/parse performance on a generated ~500 MiB file. Creates
+  `scripts/big.internal.json` if absent.
+
+## Configuration
+
+### `deno.json`
+
+| Key | Value |
+|-----|-------|
+| Task `run` | `deno run --allow-all ./server.ts` |
+| Import alias `@/` | `./src/` |
+| Imports | `@std/path@1.1.4`, `@std/streams`, `@std/async@1.3.0`, `@core/asyncutil`, `npm:simple-git@3.36.0` |
+| Formatter | 4-space indent, single quotes, 120-column width |
+
+### Hardcoded runtime config in `server.ts`
 
 ```ts
 const conn = {
@@ -29,190 +48,220 @@ const lib = {
 };
 ```
 
-## Deno Configuration (`deno.json`)
-
-- task `run`: `deno run --allow-all ./server.ts`
-- import alias `@/` -> `./src/`
-- imports include `@std/path`, `@std/streams`, `@std/async`, `@core/asyncutil`, `simple-git`
-- formatter: 4-space indent, single quotes, 120-column width
-
 ## HTTP Server (`server.ts`)
-
-`server.ts` starts `Deno.serve({ port: 8000 }, handler)`.
 
 Routes:
 
-- `/image/:oid` (any method) -> `handleImage(req, conn)`
-- `GET /` -> `handleRoot(lib)`
-- `POST /ingest` -> `handleIngest(req, lib, conn)`
-- all other routes -> `404 Not Found`
+| Pattern | Method | Handler |
+|---------|--------|---------|
+| `/image/:oid` | any | `handleImage(req, conn)` — proxies LFS blob download |
+| `/` | GET | `handleRoot(lib)` — gallery HTML page |
+| `/ingest` | POST | `handleIngest(req, lib, conn)` — multipart image upload |
+| all other | any | 404 |
 
-Startup behavior:
+Startup:
 
-- checks for `index/image_state.json` under the library
-- if missing, logs an initialization message and runs `processEvents(lib, store)`
-- `processEvents` is awaited before `Deno.serve`
+- `Deno.stat(join(lib.path, 'index', 'image_state.json'))` determines whether indexes exist
+- If not, `processEvents(lib, store)` rebuilds indexes before `Deno.serve` starts
 
-## Ingest + Gallery Handlers (`src/handlers.ts`)
+## Source Structure
 
-### `handleRoot(lib)`
-
-- reads `lib.path/index/image_state.json`
-- renders HTML cards with image metadata (`name`, `tags`, `width`, `height`)
-- image bytes are fetched via `/image/{oid}`
-
-### `handleIngest(req, lib, conn)`
-
-- expects multipart field `image`
-- computes SHA-256 OID for uploaded bytes
-- deduplicates by scanning `index/image_state.json` OIDs (falls back to `{}` when absent)
-- optional form fields: `name`, `tags` (JSON array string), `width`, `height`, `mtime`
-- creates an `add` event with path `images/{id}.png`
-- calls `internalIngest`
-- returns `{ id }` with:
-  - `200` on dedupe
-  - `201` on new ingest
-
-### `internalIngest(bytes, lib, conn, event, size)`
-
-Flow:
-
-1. build Git LFS pointer text
-2. `PutObjectMeta(conn, oid, size)`
-3. `PutObjectContent(conn, oid, blob)`
-4. write pointer file to `lib.path/event.path`
-5. append event to `lib.path/events/2026-05.ndjson`
-6. `git add [event.path, events/2026-05.ndjson]`
-7. `git commit -m "booru: add image {id}"`
-
-On failure it returns JSON `Response` errors; on success it returns `void`.
-
-## LFS API Wrapper (`src/lfs/api.ts`)
-
-`Connection`:
-
-```ts
-{ url: string; auth: string; user: string; repo: string }
+```
+src/
+  handlers.ts   — HTTP handlers: ingest, gallery root, image proxy
+  lfs/
+    api.ts      — Git LFS HTTP client (PUT/GET/HEAD for object metadata and content)
+    openapi.json — 10-path OpenAPI 3.0 spec titled "Git LFS Server"
+  index_store.ts — DerivedIndexStore interface and JsonFileIndexStore implementation
+  indexer.ts    — Event replay engine (processEvents) + event application logic
+  git.ts        — Library initialization via template clone
+  library.ts    — LibraryConnection type { path: string }
+  logging.ts    — Debug logger (DEBUG=true, custom Error inspect)
+  util.ts       — panic(), response helpers (c.json, c.text, c.blob, c.error)
+  test_InitWith5Images.ts — Integration script: init library, ingest 5 PNGs, print timing tables
 ```
 
-Implemented functions:
+## Core Modules
 
-- `PutObjectMeta` -> `POST /{user}/{repo}/objects` (or `/objects` when user/repo empty)
-- `PutObjectContent` -> `PUT /{user}/{repo}/objects/{oid}`
-- `GetObjectMeta` -> `GET /{user}/{repo}/objects/{oid}`
-- `GetObjectContent` -> `GET /{user}/{repo}/objects/{oid}`
-- `HeadObjectMeta` -> `HEAD /{user}/{repo}/objects/{oid}`
+### Handlers (`src/handlers.ts`)
 
-`src/lfs/openapi.json` is a 10-path OpenAPI spec titled `Git LFS Server` (version `1.0.0`).
+**`handleRoot(lib)`** — Reads `lib.path/index/image_state.json`, renders an HTML
+gallery page with image cards (name, tags, dimensions, inline image via
+`/image/{oid}`). Does not handle missing `image_state.json`.
 
-## Indexer (`indexer.ts`)
+**`handleIngest(req, lib, conn)`** — Accepts multipart form with field `image`.
+Computes SHA-256 OID from uploaded bytes. Deduplicates by scanning
+`index/image_state.json` OIDs (falls back to `{}` if the file is absent). Optional
+form fields: `name`, `tags` (JSON array string), `width`, `height`, `mtime`.
+Creates an `add` event and delegates to `internalIngest`. Returns `{ id }` with
+200 on dedupe, 201 on new ingest.
 
-Main function:
+**`internalIngest(bytes, lib, conn, event, size)`** — Six-step pipeline:
 
-```ts
-processEvents(conn: LibraryConnection, store: DerivedIndexStore): Promise<IndexResult>
+1. Build Git LFS pointer text
+2. `PutObjectMeta(conn, oid, size)` — register blob metadata with LFS server
+3. `PutObjectContent(conn, oid, blob)` — upload blob bytes
+4. Write pointer file to `lib.path/images/{id}.png`
+5. Append event line to `lib.path/events/2026-05.ndjson`
+6. `git add` and `git commit` both files
+
+Returns JSON error responses on failure; `void` on success.
+
+**`handleImage(req, conn)`** — Extracts OID from `/image/:oid` path and proxies
+to `GetObjectContent`.
+
+The event log shard name is hardcoded to `events/2026-05.ndjson`; the `getCurrentYearMonth` helper exists but is unused.
+
+### LFS API Client (`src/lfs/api.ts`)
+
+`Connection` type: `{ url, auth, user, repo }`.
+
+Five exported functions, each constructing URLs and setting Accept/Authorization headers:
+
+| Function | Method | Path | Accept |
+|----------|--------|------|--------|
+| `PutObjectMeta` | POST | `/{user}/{repo}/objects` | `application/vnd.git-lfs+json` |
+| `PutObjectContent` | PUT | `/{user}/{repo}/objects/{oid}` | `application/vnd.git-lfs` |
+| `GetObjectMeta` | GET | `/{user}/{repo}/objects/{oid}` | `application/vnd.git-lfs+json` |
+| `GetObjectContent` | GET | `/{user}/{repo}/objects/{oid}` | `application/vnd.git-lfs` |
+| `HeadObjectMeta` | HEAD | `/{user}/{repo}/objects/{oid}` | `application/vnd.git-lfs+json` |
+
+The batch API (`POST /objects/batch`), locking APIs, and tus verify endpoints are
+documented in the OpenAPI spec but not implemented in the client.
+
+### Derived Index Store (`src/index_store.ts`)
+
+**`DerivedIndexStore` interface** — `getCursor`, `saveCursor`, `getImage`,
+`getIdByOid`, `applyEvent`, `listImages`, `close`.
+
+**`JsonFileIndexStore`** — The sole implementation. Persists three JSON files under
+the library root:
+
+- `event_cursor` — resume position `{ eventFile, byteOffset }`
+- `index/image_state.json` — `Record<string, ImageState>`
+- `index/tag_index.json` — `Record<string, string[]>`
+
+Uses `@core/asyncutil/mutex` for write serialization. Atomic writes via
+`tmp + rename` pattern. `getCursor()` returns in-memory cache only;
+`saveCursor()` writes to disk. `applyEvent` loads both index files, calls
+`applyEvent` from `indexer.ts`, writes both files, then writes the cursor.
+
+### Indexer (`indexer.ts`)
+
+**`processEvents(conn, store)`** — The event replay engine:
+
+1. Ensures `index/` directory exists
+2. Scans `events/` for `.ndjson` files, sorts shard names
+3. Resumes from `store.getCursor()` if available (skips prior shards, seeks to byte offset within current shard)
+4. Streams lines via `TextLineStream`, parses each as JSON, calls `store.applyEvent(event, cursor)`
+5. Reports final counts from `image_state.json` and `tag_index.json`
+
+**`applyEvent(imageState, tagIndex, event)`** — Pure function applying event ops:
+
+- `add` — inserts/updates image state, rebuilds tag index entries
+- `tag_add` — appends tag to image, adds to tag index
+- `tag_remove` — removes tag from image and tag index, prunes empty tag entries
+- `delete` — removes image and its tag entries
+
+Returns `IndexResult { images, tags, eventFiles, events }`.
+
+### Library Initialization (`src/git.ts`)
+
+**`Init(repoPath)`** — Clones `libraries/template` with `GIT_LFS_SKIP_SMUDGE=1`,
+appends `[lfs] skipSmudge = true` to `.git/config`, and adds `upstream` remote
+pointing to `https://github.com/USER/REPO.git`. The template must resolve to a
+real path (panics if not). Returns `null` on success or the `Error` from clone.
+
+## Core Flows
+
+### Ingest Flow
+
+```
+POST /ingest (multipart image)
+  → compute SHA-256 OID
+  → dedupe scan: index/image_state.json OIDs
+  → assign next sequential ID
+  → PUT LFS blob metadata → PUT LFS blob content
+  → write pointer file (images/{id}.png)
+  → append NDJSON event line (events/2026-05.ndjson)
+  → git add + git commit
+  → 201 { id }
 ```
 
-Behavior:
+### Gallery Serving Flow
 
-- ensures `index/` exists
-- scans `events/` for `.ndjson` files and sorts shard names
-- replays events through `store.applyEvent(event, cursor)`
-- updates cursor byte offsets per processed line
-- reads final `image_state.json` and `tag_index.json` to produce counts
-- logs summary: images, tags, event files, events
-
-Supported event ops: `add`, `tag_add`, `tag_remove`, `delete`.
-
-CLI mode:
-
-```bash
-deno run --allow-all indexer.ts [library-path]
+```
+GET /
+  → read index/image_state.json
+  → render HTML with inline <img src="/image/{oid}">
+  → GET /image/{oid} → GetObjectContent(conn, oid) → LFS server
 ```
 
-Default path when omitted: `<project>/libraries/new`.
+### Index Rebuild Flow
 
-## Derived Index Store (`src/index_store.ts`)
-
-`JsonFileIndexStore` implements `DerivedIndexStore` with:
-
-- cursor file: `event_cursor`
-- state file: `index/image_state.json`
-- tag file: `index/tag_index.json`
-- mutex-protected writes via `@core/asyncutil/mutex`
-- atomic JSON writes using `tmp + rename`
-
-Key behavior:
-
-- `applyEvent` updates image state and tag index, then writes `event_cursor`
-- `getCursor()` returns in-memory cache only
-- `saveCursor()` writes cursor to disk and updates in-memory cache
-
-## Git Library Initialization (`src/git.ts`)
-
-`Init(repoPath)`:
-
-- clones `libraries/template` with `GIT_LFS_SKIP_SMUDGE=1`
-- appends to `.git/config`:
-
-```ini
-[lfs]
-	skipSmudge = true
+```
+Startup or CLI
+  → scan events/ for .ndjson shards, sort
+  → resume from event_cursor if present
+  → stream lines, parse JSON events
+  → applyEvent to in-memory image state + tag index
+  → atomic write to index/image_state.json, index/tag_index.json, event_cursor
 ```
 
-- adds remote `upstream` -> `https://github.com/USER/REPO.git`
-- returns `null` on success or clone error on failure
+## Persistence Layout
 
-## Script: `src/test_InitWith5Images.ts`
+Each library directory (`libraries/new`, `libraries/template`, `libraries/inspiration`) is a Git repository with:
 
-Purpose:
+```
+{library}/
+  .git/                          — Git metadata
+  .gitattributes                 — LFS filter rules for image/*.png, *.jpg, etc.
+  .gitignore                     — ignores index/* except .gitkeep
+  .lfsconfig                     — lfs.url and lfs.fetchexclude
+  images/                        — Git LFS pointer files (e.g., 1.png, 2.png)
+  events/                        — NDJSON event shards (e.g., 2026-05.ndjson)
+  index/                         — derived index files
+    image_state.json             — { [id]: ImageState }
+    tag_index.json               — { [tag]: id[] }
+  event_cursor                   — { eventFile, byteOffset }
+```
 
-- deletes and recreates `libraries/new`
-- runs `Init(lib.path)`
-- reads first 5 PNGs from `$HOME/example-images`
-- computes SHA-256 + PNG dimensions + file stats
-- ingests each image via `internalIngest`
-- prints setup, per-image, and aggregate timing tables
+`libraries/template/` is the baseline skeleton with `.gitkeep` placeholders.
+`libraries/new/` contains ingested pointer files and event data.
+`libraries/inspiration/` contains a real image file at `images/1.png`.
 
-## Bench (`bench/read_json_sync_bench.ts`)
+`libraries/` is gitignored at the project root.
 
-- creates `bench/big.internal.json` if missing (target size: 500 MiB)
-- runs sync read/parse Deno benchmarks
-- prints file size, entry count, read time, and parse time
+## Scripts and Utilities
 
-## Library Directories (`libraries/`)
+### `scripts/dump_types.ts`
 
-`libraries/` is ignored by root `.gitignore`, and contains:
+Uses `npm:typescript@6.0.3` to create a program from all `.ts` files under `src/`
+and prints exported function signatures, interfaces, type aliases, enums, and
+classes (with bodies stripped).
 
-- `template/`: baseline LFS-enabled repo skeleton (`images/`, `events/`, `index/` with `.gitkeep`), plus `.lfsconfig` with:
-  - `lfs.url = http://localhost:8080`
-  - `lfs.fetchexclude = *`
-- `new/`: local working library with:
-  - pointer files `images/1.png`..`images/5.png`
-  - `events/2026-05.ndjson`
-  - `index/image_state.json`, `index/tag_index.json`
-  - `event_cursor`
-  - `.lfsconfig` with `lfs.url` and `lfs.fetchexclude = *`
-- `inspiration/`: local library containing a real image file at `images/1.png`
+### `scripts/read_json_sync_bench.ts`
 
-Each library directory is also a Git repository with local `.git/` metadata.
+Generates a ~500 MiB JSON file (`scripts/big.internal.json`) containing
+`{ "1": { oid, path, tags, ... }, ... }` entries. Runs three Deno benchmarks:
+read+parse, read-only, and parse-only.
 
-## Other Source Files
+### `src/test_InitWith5Images.ts`
 
-- `src/library.ts`: `LibraryConnection = { path: string }`
-- `src/logging.ts`: debug logger with `DEBUG = true`
-- `src/util.ts`: `panic(...)` and response helpers (`c.json`, `c.text`, `c.blob`, `c.error`)
+Integration test script:
 
-## Repository Docs and Planning Files
+1. Removes `libraries/new`
+2. Calls `Init(lib.path)` to clone fresh from template
+3. Reads first 5 PNGs from `$HOME/example-images`
+4. Computes SHA-256, PNG dimensions, and file stats per image
+5. Ingests each via `internalIngest`
+6. Prints per-image and aggregate timing tables (read, hash, dimensions, stat, ingest)
 
-- `readme.md`: architecture notes for an event-log/Git-LFS booru design
-- `DESIGN.md`: error-handling and TypeScript API design principles
-- `PLANNED.md` and `todo`: planned work items
+## Implementation Constraints
 
-## Observed Constraints in Code
-
-- server config, library path, and LFS connection are hardcoded
-- ingest appends only to `events/2026-05.ndjson`
-- ingest dedupe depends on `index/image_state.json`
-- `handleRoot` expects `index/image_state.json` and has no fallback response when missing
-- gallery HTML is string-built and unescaped
+- Server config, library path, and LFS connection are hardcoded in `server.ts`
+- Ingest appends only to `events/2026-05.ndjson` (shard name is hardcoded)
+- Ingest deduplication depends on `index/image_state.json` being present
+- `handleRoot` expects `index/image_state.json` and throws if absent
+- Gallery HTML is string-built and unescaped
+- Resource cleanup is not implemented (no `close()` calls on `DerivedIndexStore`)
