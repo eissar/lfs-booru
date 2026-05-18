@@ -3,14 +3,21 @@ import type { Event, ImageState, ImageStateIndex, TagIndex } from '../indexer.ts
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 
+// TODO:
+// guard to detect file rotation (size < offset, or file switched)
+// ensure: atomic operations
+// only advance cursor (offset) after successfully applying entire events, incl. newline
+//
+// this should be stored in memory & written to disk
+//
+/** @property {byteOffset} asdf */
 export type IndexCursor = {
     eventFile: string;
-    line: number;
     byteOffset: number;
 };
 
 export interface DerivedIndexStore {
-    getCursor(): Promise<IndexCursor | null>;
+    getCursor(): IndexCursor | null;
 
     getImage(id: string): Promise<ImageState | null>;
     getIdByOid(oid: string): Promise<string | null>;
@@ -22,26 +29,20 @@ export interface DerivedIndexStore {
     close(): Promise<void> | void;
 }
 
-export type JsonFileIndexStoreOptions = {
-    indexDir?: string;
-    imageStateFile?: string;
-    tagIndexFile?: string;
-    cursorFile?: string;
-};
-
 const mu = new Mutex();
 
-// TODO: remove class and do like this
-// TODO: remove class and do like this
 /** @param {LibraryConnection} conn - reference */
-export function JsonFileIndexStore(
+export async function JsonFileIndexStore(
     conn: LibraryConnection,
-): DerivedIndexStore {
+): Promise<DerivedIndexStore> {
+    const cursorPath = join(conn.path, 'event_cursor');
+    let cursorCache = await readJsonFile(cursorPath, () => null as IndexCursor | null);
+
     return {
-        async getCursor(): Promise<IndexCursor | null> {
-            using _lock = await mu.acquire(); // Automatically disposed when exiting scope ?
-            const cursorPath = join(conn.path, 'event_cursor');
-            return await readJsonFile(cursorPath, () => null as IndexCursor | null);
+        getCursor(): IndexCursor | null {
+            // we do not need to use the mutex
+            // using _lock = await mu.acquire();
+            return cursorCache;
         },
 
         async getImage(id: string): Promise<ImageState | null> {
@@ -78,9 +79,13 @@ export function JsonFileIndexStore(
             const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
             applyEventToImageState(imageState, event);
 
+            // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
+            // then state and tag index are made inconsistent
             await writeJsonFile(statePath, imageState);
             await writeJsonFile(indexPath, buildTagIndex(imageState));
+            // write to cursor last
             await writeJsonFile(cursorPath, nextCursor);
+            cursorCache = nextCursor;
         },
 
         async *listImages(options: { limit?: number } = {}): AsyncIterable<[string, ImageState]> {

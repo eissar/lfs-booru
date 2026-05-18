@@ -161,7 +161,13 @@ Default path when omitted: `<project>/libraries/new`.
 
 ## Other Source Files
 
-- `src/index_store.ts`: interface/types for a future derived index storage abstraction
+- `src/index_store.ts`: JSON-backed `DerivedIndexStore` implementation (`JsonFileIndexStore(conn)`), with:
+  - `IndexCursor = { eventFile, byteOffset }`
+  - cursor path: `event_cursor` at the library root
+  - methods: `getCursor`, `getImage`, `getIdByOid`, `applyEvent(event, nextCursor)`, `listImages`, `close`
+  - constructor accepts `LibraryConnection` only
+  - locking uses `using _lock = await mu.acquire()`
+  - `applyEvent` updates `index/image_state.json`, rebuilds `index/tag_index.json`, then writes `event_cursor`
 - `src/logging.ts`: debug logger (`DEBUG = true`)
 - `src/util.ts`: panic + response helpers
 
@@ -203,4 +209,4 @@ timeout 2s deno task run
 - Ingest dedupe relies on up-to-date `index/image_state.json`.
 - Server does not auto-run indexer after ingest.
 - Gallery HTML is minimal and not escaped/sanitized.
-- Indexer is full rebuild (not incremental/cursor-based).
+- `indexer.ts` entrypoint performs full rebuild.
