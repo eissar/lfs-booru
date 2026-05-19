@@ -2,7 +2,7 @@ import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { handleImage, handleIngest, handleRootNew } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
-import { processEventsNew } from '@/indexer.ts';
+import { processEvents } from '@/indexer.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
@@ -69,7 +69,7 @@ async function Start(port: number = 8000) {
     if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
 
     debug(`indexFlag=${indexFlag} IndexStoreBackend=${store.constructor.name}`);
-    if (indexFlag) await processEventsNew(store, eventLog);
+    if (indexFlag) await processEvents(store, eventLog);
     // if (indexFlag) await processEvents(lib, store);
 
     Deno.serve({ port }, createHandler(store, eventLog, conn, lib));
