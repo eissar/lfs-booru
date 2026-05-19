@@ -254,5 +254,3 @@ After successfully updating the files, summarize:
 - whether `deno run --allow-all scripts/dump_types.ts` succeeded
 - any files skipped during inspection
 
-Because this skill file is opencode configuration, tell the user to quit and
-restart opencode for the renamed skill to be loaded.
