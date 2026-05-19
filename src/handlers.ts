@@ -4,6 +4,8 @@ import { Connection as BooruConn } from '@/lfs/api.ts';
 import { debug } from '@/logging.ts';
 import { dirname, join } from '@std/path';
 import { simpleGit } from 'simple-git';
+import type { EventLog } from '@/event_log.ts';
+import type { DerivedIndexStore } from '@/index_store.ts';
 
 // /** @description */
 type ImageState = {
@@ -27,6 +29,38 @@ type Event = {
     name: string;
     mtime: string;
 };
+
+// Narrow Event to add operations — internalIngest only handles image ingestion
+type AddEvent = Extract<Event, { op: 'add' }>;
+type GalleryImage = ImageState & { id: string };
+
+export async function handleRootNew(store: DerivedIndexStore): Promise<Response> {
+    const images: GalleryImage[] = [];
+    for await (const [id, img] of store.listImages()) {
+        if (img.oid) {
+            images.push({ id, ...img });
+        }
+    }
+
+    const html = `
+    <h1>LFS Image Gallery</h1>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+      ${
+        images.map((img) => `
+        <div style="border: 1px solid #ccc; padding: 10px; max-width: 350px;">
+          <p><strong>${img.name}</strong></p>
+          <p>Tags: ${img.tags.join(', ') || 'none'}</p>
+          <p>${img.width}×${img.height}</p>
+          <img src="/image/${img.oid}" style="max-width: 300px;" />
+        </div>
+      `).join('')
+    }
+    </div>`;
+
+    return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+}
 
 export async function handleRoot(lib: LibraryConnection): Promise<Response> {
     const state = JSON.parse(
