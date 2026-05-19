@@ -34,6 +34,7 @@ This style is preferred because it:
 * Avoid custom error class trees unless they encode behavior that materially affects handling.
 * Prefer explicit logging, cleanup, and early-return at the point where failure semantics are understood.
 * Prefer straightforward procedural control flow over simulated effect systems.
+* Do not use `try`/`catch` blocks — use `.catch()` on promises with sentinel returns instead.
 
 ### Recoverable vs Fatal Failures
 
