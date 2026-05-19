@@ -1,5 +1,4 @@
 import { dirname, join } from '@std/path';
-import { applyEvent } from '@/indexer.ts';
 import type { Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
@@ -42,6 +41,24 @@ export interface DerivedIndexStore {
     /** apply and write event_cursor */
     applyEvent(event: Event, nextCursor: IndexCursor): Promise<void>;
 
+    /**
+     * Reserve the next image ID for a new add event.
+     *
+     * Use this only on the write path before constructing a new `add` event.
+     * Index replay must not allocate IDs; it should reconcile `next_image_id`
+     * from committed add-event IDs so the event log remains authoritative.
+     *
+     * gaps in IDs are fine this is monotonically increasing.
+     * deleting an image will not free up that ID until
+     * we do compaction/ log minification.
+     * only needs to be repeatable for combinations of
+     * eventLog + IndexStore backend, not accross backends
+     * since I don't want to deal with making it deterministic like that
+     *
+     * @returns The reserved image ID.
+     */
+    allocateImageId(): Promise<number>;
+
     listImages(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
 
     /**
@@ -63,14 +80,22 @@ export interface DerivedIndexStore {
     close(): Promise<void> | void;
 }
 
-const mu = new Mutex();
-
+// we store mutexes per instance which is fine for now
 export class JsonFileIndexStore implements DerivedIndexStore {
+    // local mutex
+    private readonly mu = new Mutex();
+    private readonly nextIdMutex = new Mutex();
     conn: LibraryConnection;
     constructor(conn: LibraryConnection) {
         this.conn = conn;
+
+        // synchronously read next_image_id
+        // on failure, throw error,
+        // TODO: attempt to re-index on err
+        this.nextImageId = Number(Deno.readTextFileSync(join(this.conn.path, 'index', 'next_image_id')).trim());
     }
 
+    nextImageId: number = 1;
     cursorCache: IndexCursor | null = null;
 
     getCursor(): IndexCursor | null {
@@ -80,7 +105,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async saveCursor(c: IndexCursor): Promise<void> {
-        using _lock = await mu.acquire();
+        using _lock = await this.mu.acquire();
 
         const cursorPath = join(this.conn.path, 'event_cursor');
         await writeJsonFile(cursorPath, c);
@@ -88,11 +113,14 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async isInitialized(): Promise<boolean> {
-        const statePath = join(this.conn.path, 'index', 'image_state.json');
-        const tagPath = join(this.conn.path, 'index', 'tag_index.json');
+        const paths = [
+            join(this.conn.path, 'index', 'image_state.json'),
+            join(this.conn.path, 'index', 'tag_index.json'),
+            join(this.conn.path, 'index', 'next_image_id'),
+        ];
 
-        return await Promise.all([Deno.stat(statePath), Deno.stat(tagPath)])
-            .then(([stateStat, tagStat]) => stateStat.isFile && tagStat.isFile)
+        return await Promise.all(paths.map((p) => Deno.stat(p)))
+            .then((stats) => stats.every((s) => s.isFile))
             .catch((error) => {
                 if (error instanceof Deno.errors.NotFound) return false;
                 throw error;
@@ -100,7 +128,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async getImage(id: string): Promise<ImageState | null> {
-        using _lock = await mu.acquire();
+        using _lock = await this.mu.acquire();
         const statePath = join(this.conn.path, 'index', 'image_state.json');
 
         const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
@@ -108,7 +136,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async getIdByOid(oid: string): Promise<string | null> {
-        using _lock = await mu.acquire();
+        using _lock = await this.mu.acquire();
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         // const cursorPath = join(this.conn.path, 'event_cursor');
 
@@ -124,7 +152,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     // → store writes imageState
     // → store writes nextCursor
     async applyEvent(event: Event, nextCursor: IndexCursor): Promise<void> {
-        using _lock = await mu.acquire();
+        using _lock = await this.mu.acquire();
 
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
@@ -132,7 +160,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
         const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
         const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
-        applyEvent(imageState, tagIndex, event);
+        applyEventToIndexState(imageState, tagIndex, event);
 
         // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
         // then state and tag index are made inconsistent
@@ -149,7 +177,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         let entries: [string, ImageState][];
 
         {
-            using _lock = await mu.acquire();
+            using _lock = await this.mu.acquire();
             const statePath = join(this.conn.path, 'index', 'image_state.json');
             const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
             entries = Object.entries(imageState);
@@ -167,7 +195,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async stats(): Promise<{ images: number; tags: number }> {
-        using _lock = await mu.acquire();
+        using _lock = await this.mu.acquire();
 
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
@@ -179,6 +207,27 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             images: Object.keys(imageState).length,
             tags: Object.keys(tagIndex).length,
         };
+    }
+
+    /**
+     * Reserve the next image ID for a new add event.
+     *
+     * This advances `index/next_image_id` before returning the ID so concurrent
+     * callers on this store instance cannot receive the same value. Callers are
+     * expected to use the returned ID when constructing and committing the add
+     * event. Index replay should reconcile the sequence from committed event IDs
+     * instead of calling this method.
+     *
+     * @returns The reserved image ID.
+     */
+    async allocateImageId(): Promise<number> {
+        using _lock = await this.nextIdMutex.acquire();
+        const id = this.nextImageId;
+        this.nextImageId = id + 1;
+        await Deno.writeTextFile(join(this.conn.path, 'index', 'next_image_id'), String(this.nextImageId), {
+            create: false,
+        });
+        return id;
     }
 
     close(): void {
@@ -201,4 +250,65 @@ async function writeJsonFile(path: string, value: unknown): Promise<void> {
     const tmpPath = `${path}.${crypto.randomUUID()}.tmp`;
     await Deno.writeTextFile(tmpPath, JSON.stringify(value));
     await Deno.rename(tmpPath, path);
+}
+
+// const eventsDir = 'events';
+
+export function addToTag(tagIndex: TagIndex, tag: string, id: string): void {
+    tagIndex[tag] ??= [];
+    if (!tagIndex[tag].includes(id)) tagIndex[tag].push(id);
+}
+function removeFromTag(tagIndex: TagIndex, tag: string, id: string): void {
+    if (!tagIndex[tag]) return;
+    tagIndex[tag] = tagIndex[tag].filter((taggedId) => taggedId !== id);
+    if (tagIndex[tag].length === 0) delete tagIndex[tag];
+}
+
+// private helper
+function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex, event: Event): void {
+    const id = String(event.id);
+
+    switch (event.op) {
+        case 'add': {
+            const existing = imageState[id];
+            if (existing) {
+                for (const tag of existing.tags) removeFromTag(tagIndex, tag, id);
+            }
+
+            const img: ImageState = {
+                oid: event.oid,
+                path: event.path,
+                tags: event.tags || [],
+                width: event.width,
+                height: event.height,
+                name: event.name,
+                mtime: event.mtime,
+            };
+            imageState[id] = img;
+            for (const tag of img.tags) addToTag(tagIndex, tag, id);
+            break;
+        }
+        case 'tag_add': {
+            const img = imageState[id];
+            if (!img) break;
+            if (!img.tags.includes(event.tag)) img.tags.push(event.tag);
+            addToTag(tagIndex, event.tag, id);
+            break;
+        }
+        case 'tag_remove': {
+            const img = imageState[id];
+            if (!img) break;
+            img.tags = img.tags.filter((tag) => tag !== event.tag);
+            removeFromTag(tagIndex, event.tag, id);
+            break;
+        }
+        case 'delete': {
+            const img = imageState[id];
+            if (img) {
+                for (const tag of img.tags) removeFromTag(tagIndex, tag, id);
+            }
+            delete imageState[id];
+            break;
+        }
+    }
 }

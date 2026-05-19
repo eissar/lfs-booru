@@ -19,7 +19,7 @@ const conn: BooruConn = {
 
 function createHandler(
     store: DerivedIndexStore,
-    _eventLog: EventLog,
+    eventLog: EventLog,
     conn: BooruConn,
     lib: LibConn,
 ): (req: Request) => Promise<Response> {
@@ -39,8 +39,7 @@ function createHandler(
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
-            // return await handleIngestNew(req, store, eventLog, lib, conn);
-            return await handleIngest(req, lib, conn);
+            return await handleIngest(req, store, eventLog, lib, conn);
         }
 
         return new Response('Not Found', { status: 404 });

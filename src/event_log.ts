@@ -2,6 +2,7 @@ import { dirname, join } from '@std/path';
 import { TextLineStream } from '@std/streams';
 import type { Event } from '@/indexer.ts';
 import type { IndexCursor } from '@/index_store.ts';
+import { Mutex } from '@core/asyncutil/mutex';
 
 const eventsDir = 'events';
 
@@ -11,6 +12,7 @@ const eventsDir = 'events';
 export type EventAppendResult = {
     /** Relative repository path for the event log shard that was appended. */
     path: string;
+    previousOffset: number;
     /** Cursor immediately after the appended event. */
     cursor: IndexCursor;
 };
@@ -26,6 +28,19 @@ export interface EventLog {
      * @returns Append result containing the changed path and next cursor.
      */
     append(event: Event): Promise<EventAppendResult>;
+
+    /**
+     * Append an event for the duration of a protected operation.
+     *
+     * If the callback resolves, the append is kept. If the callback rejects,
+     * the appended shard is truncated back to its previous offset before the
+     * error is rethrown.
+     *
+     * @param event Event to append.
+     * @param fn Operation that must succeed for the append to be kept.
+     * @returns Resolves after the callback succeeds and the append is kept.
+     */
+    appendWithRollback(event: Event, fn: (appendResult: EventAppendResult) => Promise<void>): Promise<void>;
 }
 
 // don't expose this in EventLog
@@ -56,8 +71,12 @@ export interface ReplayableEventLog extends EventLog {
 
 /**
  * File-backed NDJSON event log.
+ *
+ * Only this class should write event log files under its library root. Other
+ * writers can make cursors wrong and events appear out of order.
  */
 export class NdjsonEventLog implements EventLog, EventLogReader {
+    private readonly mu = new Mutex();
     readonly rootPath: string;
     // we shouldn't need this
     // readonly shardName: () => string;
@@ -82,6 +101,7 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
      * @returns Append result containing the changed path and next cursor.
      */
     async append(event: Event): Promise<EventAppendResult> {
+        using _lock = await this.mu.acquire();
         const eventFile = getCurrentEventShard();
         const path = join(eventsDir, eventFile);
         const absolutePath = join(this.rootPath, path);
@@ -100,11 +120,64 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
 
         return {
             path,
+            previousOffset: byteOffset,
             cursor: {
                 eventFile,
                 byteOffset: byteOffset + new TextEncoder().encode(line).byteLength,
             },
         };
+    }
+
+    /**
+     * Append an event and roll it back if the protected operation fails.
+     *
+     * The event-log mutex is held until the callback resolves or rollback
+     * completes, so no later append can be truncated accidentally.
+     *
+     * @param event Event to append.
+     * @param fn Operation that must succeed for the append to be kept.
+     * @returns Resolves after the callback succeeds and the append is kept.
+     */
+    async appendWithRollback(event: Event, fn: (appendResult: EventAppendResult) => Promise<void>): Promise<void> {
+        using _lock = await this.mu.acquire();
+        const eventFile = getCurrentEventShard();
+        const path = join(eventsDir, eventFile);
+        const absolutePath = join(this.rootPath, path);
+
+        await Deno.mkdir(dirname(absolutePath), { recursive: true });
+
+        const line = JSON.stringify(event) + '\n';
+        const previousOffset = await Deno.stat(absolutePath)
+            .then((stat) => stat.size)
+            .catch((error) => {
+                if (error instanceof Deno.errors.NotFound) return 0;
+                throw error;
+            });
+        const byteOffset = previousOffset + new TextEncoder().encode(line).byteLength;
+
+        await Deno.writeTextFile(absolutePath, line, { append: true, create: true });
+
+        const appendResult: EventAppendResult = {
+            path,
+            previousOffset,
+            cursor: {
+                eventFile,
+                byteOffset,
+            },
+        };
+
+        try {
+            await fn(appendResult);
+        } catch (error) {
+            const stat = await Deno.stat(absolutePath);
+
+            if (stat.size !== appendResult.cursor.byteOffset) {
+                throw new Error('Cannot roll back event append: event log has changed');
+            }
+
+            await Deno.truncate(absolutePath, appendResult.previousOffset);
+            throw error;
+        }
     }
 
     /**

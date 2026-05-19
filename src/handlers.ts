@@ -1,10 +1,10 @@
-import { LibraryConnection } from '@/library.ts';
-import { GetObjectContent, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
-import { Connection as BooruConn } from '@/lfs/api.ts';
-import { debug } from '@/logging.ts';
+import type { DerivedIndexStore } from './index_store.ts';
+import type { EventLog } from './event_log.ts';
+import { Connection as BooruConn, GetObjectContent, PutObjectContent, PutObjectMeta } from './lfs/api.ts';
+import { LibraryConnection } from './library.ts';
+import { debug } from './logging.ts';
 import { dirname, join } from '@std/path';
 import { simpleGit } from 'simple-git';
-import type { DerivedIndexStore } from '@/index_store.ts';
 
 // /** @description */
 type ImageState = {
@@ -70,18 +70,16 @@ export async function handleRoot(store: DerivedIndexStore): Promise<Response> {
     });
 }
 
-const eventLogPath = 'events/2026-05.ndjson';
-
 export async function internalIngest(
     bytes: Uint8Array<ArrayBuffer>,
     lib: LibraryConnection,
+    eventLog: EventLog,
     conn: BooruConn,
     e: AddEvent,
     size: number,
 ): Promise<Response | void> {
     const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${e.oid}\nsize ${size}\n`;
     const pointerPath = join(lib.path, e.path);
-    const eventPath = join(lib.path, eventLogPath);
 
     const metaRes = await PutObjectMeta(conn, e.oid, size);
     debug({ lfsMetaOk: metaRes.ok, lfsMetaStatus: metaRes.status });
@@ -103,50 +101,54 @@ export async function internalIngest(
 
     // pointerPath - yyyy-mm.ndjson
     await Deno.mkdir(dirname(pointerPath), { recursive: true });
-    await Deno.mkdir(dirname(eventPath), { recursive: true });
     await Deno.writeTextFile(pointerPath, pointer);
-    await Deno.writeTextFile(
-        eventPath,
-        JSON.stringify(e) + '\n',
-        { append: true, create: true },
-    );
 
     const git = simpleGit(lib.path);
-    const gitAddError = await git.add([e.path, eventLogPath])
-        .then((result) => {
-            debug(result);
-            return null;
-        })
-        .catch((err: unknown) =>
-            new Response(
-                JSON.stringify({
-                    error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
-                }),
-                { status: 500, headers: { 'Content-Type': 'application/json' } },
-            )
-        );
-    if (gitAddError) return gitAddError;
 
-    const gitCommitError = await git.commit(
-        `booru: add image ${e.id}`,
-        [e.path, eventLogPath],
-    )
-        .then((result) => {
-            debug(result);
-            return null;
-        })
-        .catch((err: unknown) =>
-            new Response(
-                JSON.stringify({
-                    error: `git commit failed: ${err instanceof Error ? err.message : String(err)}`,
-                }),
+    const ingestError = await eventLog.appendWithRollback(e, async (appendResult) => {
+        await git.add([e.path, appendResult.path])
+            .then((result) => debug(result))
+            .catch((err: unknown) => {
+                throw new Response(
+                    JSON.stringify({
+                        error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
+                    }),
+                    { status: 500, headers: { 'Content-Type': 'application/json' } },
+                );
+            });
+
+        await git.commit(
+            `booru: add image ${e.id}`,
+            [e.path, appendResult.path],
+        )
+            .then((result) => debug(result))
+            .catch((err: unknown) => {
+                throw new Response(
+                    JSON.stringify({
+                        error: `git commit failed: ${err instanceof Error ? err.message : String(err)}`,
+                    }),
+                    { status: 500, headers: { 'Content-Type': 'application/json' } },
+                );
+            });
+    })
+        .then(() => null)
+        .catch((err: unknown) => {
+            if (err instanceof Response) return err;
+            return new Response(
+                JSON.stringify({ error: `ingest failed: ${err instanceof Error ? err.message : String(err)}` }),
                 { status: 500, headers: { 'Content-Type': 'application/json' } },
-            )
-        );
-    if (gitCommitError) return gitCommitError;
+            );
+        });
+    if (ingestError) return ingestError;
 }
 
-export async function handleIngest(req: Request, lib: LibraryConnection, conn: BooruConn): Promise<Response> {
+export async function handleIngest(
+    req: Request,
+    store: DerivedIndexStore,
+    eventLog: EventLog,
+    lib: LibraryConnection,
+    conn: BooruConn,
+): Promise<Response> {
     const form = await req.formData();
 
     const file = form.get('image') as File | null;
@@ -163,43 +165,47 @@ export async function handleIngest(req: Request, lib: LibraryConnection, conn: B
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const oid = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-    const state = await Deno.readTextFile(join(lib.path, 'index/image_state.json'))
-        .then((text) => JSON.parse(text) as Record<string, ImageState>)
-        .catch(() => ({} as Record<string, ImageState>));
-    for (const [id, img] of Object.entries(state)) {
-        if (img.oid === oid) {
-            return new Response(JSON.stringify({ id: parseInt(id) }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        }
-    }
+    // don't check for duplicates; we allow duplicates
+    // storage is content addressible
+    // we can async check for duplicates by image signature
+    // later.
 
     const size = bytes.byteLength;
 
-    const ids = Object.keys(state).map(Number);
-    const nextId = ids.length > 0 ? Math.max(...ids) + 1 : 1;
+    // const ids = Object.keys(state).map(Number);
+    // const nextId = Math.max(...ids, 0) + 1;
 
-    const name = (form.get('name') as string) || `Image ${nextId}`;
     const tagsRaw = (form.get('tags') as string) || '[]';
+
     const tags = await Promise.resolve(tagsRaw)
         .then((raw) => JSON.parse(raw))
-        .then((parsed) => Array.isArray(parsed) ? parsed as string[] : null)
+        .then((parsed) => {
+            if (!Array.isArray(parsed)) return null;
+            if (!parsed.every((item) => typeof item === 'string')) return null;
+            return parsed as string[];
+        })
         .catch(() => null);
+
     if (!tags) {
         return new Response(
-            JSON.stringify({ error: 'tags must be a JSON array string' }),
+            JSON.stringify({ error: 'tags must be a JSON array of strings' }),
             { status: 400, headers: { 'Content-Type': 'application/json' } },
         );
     }
+
+    // TODO: parse image with async job to set dimensions ?
     const height = parseInt((form.get('height') as string) || '0') || 0;
     const width = parseInt((form.get('width') as string) || '0') || 0;
+
     const mtime = (form.get('mtime') as string) || new Date().toISOString();
+
+    const id = await store.allocateImageId();
+    const name = (form.get('name') as string) || `Image ${id}`;
 
     const event: AddEvent = {
         op: 'add',
-        id: nextId,
-        path: `images/${nextId}.png`,
+        id: id,
+        path: `images/${id}.png`,
         oid,
         tags,
         width,
@@ -208,10 +214,10 @@ export async function handleIngest(req: Request, lib: LibraryConnection, conn: B
         mtime,
     };
 
-    const result = await internalIngest(bytes, lib, conn, event, size);
+    const result = await internalIngest(bytes, lib, eventLog, conn, event, size);
     if (result) return result;
 
-    return new Response(JSON.stringify({ id: nextId }), {
+    return new Response(JSON.stringify({ id: id }), {
         status: 201,
         headers: { 'Content-Type': 'application/json' },
     });

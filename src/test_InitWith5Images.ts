@@ -5,6 +5,7 @@ import { LibraryConnection } from '@/library.ts';
 import { Init } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
 import { internalIngest } from '@/handlers.ts';
+import { NdjsonEventLog } from '@/event_log.ts';
 
 for (const type of ['unhandledrejection', 'error']) {
     globalThis.addEventListener(type, (e) => {
@@ -27,6 +28,7 @@ const conn: LfsConn = {
 const lib: LibraryConnection = {
     path: '/home/eissar/code/lfs-booru/libraries/new/',
 };
+const eventLog = new NdjsonEventLog(lib.path);
 
 type ImageTiming = {
     id: number;
@@ -150,7 +152,7 @@ if (import.meta.main) {
         const [stat, statMs] = await timed(() => Deno.stat(imagePath));
 
         const [result, ingestMs] = await timed(() =>
-            internalIngest(bytes, lib, conn, {
+            internalIngest(bytes, lib, eventLog, conn, {
                 op: 'add',
                 id,
                 path: `images/${id}.png`,
