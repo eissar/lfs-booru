@@ -3,6 +3,8 @@ import type { DerivedIndexStore, IndexCursor } from '@/index_store.ts';
 import { JsonFileIndexStore } from '@/index_store.ts';
 import { LibraryConnection } from '@/library.ts';
 import { TextLineStream } from '@std/streams';
+import { EventLog, EventLogReader, NdjsonEventLog } from './event_log.ts';
+import { panic } from './util.ts';
 
 export type ImageState = {
     oid: string;
@@ -56,7 +58,6 @@ export type IndexResult = {
 };
 
 const eventsDir = 'events';
-const indexDir = 'index';
 
 function removeFromTag(tagIndex: TagIndex, tag: string, id: string): void {
     if (!tagIndex[tag]) return;
@@ -119,13 +120,42 @@ export function applyEvent(imageState: ImageStateIndex, tagIndex: TagIndex, even
 
 // we process events from the
 // sharded events log at eventsDir
+export async function processEventsNew(
+    store: DerivedIndexStore,
+    eventLog: EventLog,
+): Promise<IndexResult> {
+    const eventShards: string[] = [];
+
+    if (!(eventLog instanceof NdjsonEventLog)) panic('Alternate EventLog not yet supported');
+
+    let eventCount = 0;
+    for await (const { event, cursor } of eventLog.readEvents(store.getCursor())) {
+        await store.applyEvent(event, cursor);
+        eventCount++;
+    }
+
+    const { images: imageCount, tags: tagCount } = await store.stats();
+
+    const result: IndexResult = {
+        images: imageCount,
+        tags: tagCount,
+        eventFiles: eventShards.length,
+        events: eventCount,
+    };
+
+    console.log(
+        `Indexed ${result.images} images, ${result.tags} tags from ${result.events} events in ${result.eventFiles} files`,
+    );
+
+    return result;
+}
+// we process events from the
+// sharded events log at eventsDir
 export async function processEvents(
     conn: LibraryConnection,
     store: DerivedIndexStore,
 ): Promise<IndexResult> {
     const eventShards: string[] = [];
-    await Deno.mkdir(join(conn.path, indexDir), { recursive: true });
-
     // TODO: refac
     const entries = await Array.fromAsync(Deno.readDir(join(conn.path, eventsDir)))
         .catch((e) => {
@@ -143,8 +173,6 @@ export async function processEvents(
 
     const resumeCursor = store.getCursor();
     let eventCount = 0;
-    let imageCount = 0;
-    let tagCount = 0;
     const encoder = new TextEncoder();
 
     for (const shard of eventShards) {
@@ -182,20 +210,7 @@ export async function processEvents(
         }
     }
 
-    // Read final counts from the store's files for reporting
-    const statePath = join(conn.path, indexDir, 'image_state.json');
-    const tagPath = join(conn.path, indexDir, 'tag_index.json');
-
-    try {
-        imageCount = Object.keys(JSON.parse(await Deno.readTextFile(statePath))).length;
-    } catch {
-        // store may not have written anything yet
-    }
-    try {
-        tagCount = Object.keys(JSON.parse(await Deno.readTextFile(tagPath))).length;
-    } catch {
-        // store may not have written anything yet
-    }
+    const { images: imageCount, tags: tagCount } = await store.stats();
 
     const result: IndexResult = {
         images: imageCount,
