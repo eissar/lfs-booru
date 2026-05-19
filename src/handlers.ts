@@ -17,6 +17,14 @@ type ImageState = {
     mtime: string;
 };
 
+// TODO: consider
+//
+// enum Op {
+//     Add    = 'add',
+//     Remove = 'remove',
+//     Update = 'update',
+// }
+
 type Event = {
     op: string;
     id: number;
@@ -30,7 +38,7 @@ type Event = {
 };
 
 // Narrow Event to add operations — internalIngest only handles image ingestion
-type AddEvent = Extract<Event, { op: 'add' }>;
+type AddEvent = Event & { op: 'add' };
 
 type GalleryImage = ImageState & { id: string };
 
@@ -68,7 +76,7 @@ export async function internalIngest(
     bytes: Uint8Array<ArrayBuffer>,
     lib: LibraryConnection,
     conn: BooruConn,
-    e: Event,
+    e: AddEvent,
     size: number,
 ): Promise<Response | void> {
     const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${e.oid}\nsize ${size}\n`;
@@ -188,7 +196,7 @@ export async function handleIngest(req: Request, lib: LibraryConnection, conn: B
     const width = parseInt((form.get('width') as string) || '0') || 0;
     const mtime = (form.get('mtime') as string) || new Date().toISOString();
 
-    const event: Event = {
+    const event: AddEvent = {
         op: 'add',
         id: nextId,
         path: `images/${nextId}.png`,
