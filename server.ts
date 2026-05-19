@@ -1,6 +1,6 @@
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
-import { handleImage, handleIngest, handleRootNew } from '@/handlers.ts';
+import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents } from '@/indexer.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
@@ -35,7 +35,7 @@ function createHandler(
         }
 
         if (url.pathname === '/') {
-            return await handleRootNew(store);
+            return await handleRoot(store);
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
