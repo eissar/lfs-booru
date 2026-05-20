@@ -36,6 +36,11 @@ function createHandler(
         }
 
         if (url.pathname === '/') {
+            // 301?
+            return Response.redirect(new URL('/gallery', url.origin), 302);
+        }
+
+        if (url.pathname === '/gallery') {
             return await handleRoot(store);
         }
 
