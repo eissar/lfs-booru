@@ -4,6 +4,7 @@ import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents } from '@/indexer.ts';
 import { Connection as BooruConn } from '@/lfs/api.ts';
+import { serveDir } from '@std/http/file-server';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
@@ -40,6 +41,13 @@ function createHandler(
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
             return await handleIngest(req, store, eventLog, lib, conn);
+        }
+
+        if (url.pathname.startsWith('/static')) {
+            return serveDir(req, {
+                fsRoot: './static',
+                urlRoot: 'static', // trim /static
+            });
         }
 
         return new Response('Not Found', { status: 404 });
