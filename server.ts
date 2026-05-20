@@ -1,6 +1,6 @@
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
-import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
+import { handleImage, handleIngest } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents } from '@/indexer.ts';
 import { LfsConnection as LfsConn } from '@/lfs/api.ts';
@@ -8,6 +8,8 @@ import { serveDir } from '@std/http/file-server';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
+import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
+import { c } from '@/util.ts';
 
 const LFS_SERVER = 'http://localhost:8080';
 
@@ -23,6 +25,7 @@ function createHandler(
     eventLog: EventLog,
     conn: LfsConn,
     lib: LibConn,
+    render: HtmlRenderer,
 ): (req: Request) => Promise<Response> {
     return async (req: Request): Promise<Response> => {
         const url = new URL(req.url);
@@ -41,7 +44,15 @@ function createHandler(
         }
 
         if (url.pathname === '/gallery') {
-            return await handleRoot(store);
+            const imageList = store.listImages();
+
+            const images: GalleryImage[] = [];
+            for await (const [id, img] of imageList) {
+                if (img.oid) images.push({ id, ...img });
+            }
+            const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
+
+            return c.html(await render.renderGalleryPage({ title: 'Gallery', cards: cards }));
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
@@ -68,6 +79,7 @@ async function Start(port: number = 8000) {
     };
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
+    const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
 
     const indexFlag = !(await store.isInitialized());
 
@@ -84,7 +96,7 @@ async function Start(port: number = 8000) {
     if (indexFlag) await processEvents(store, eventLog);
     // if (indexFlag) await processEvents(lib, store);
 
-    Deno.serve({ port }, createHandler(store, eventLog, conn, lib));
+    Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render));
 }
 
 if (import.meta.main) {
