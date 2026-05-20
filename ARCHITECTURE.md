@@ -4,11 +4,11 @@
 
 The booru prototype is an event-sourced image gallery built around three persistent concerns:
 
-- Git LFS stores immutable image bytes by SHA-256 OID.
-- A library Git repository stores Git LFS pointer files and append-only NDJSON metadata events.
-- Derived JSON indexes materialize the gallery state used by HTTP reads.
+- **Git LFS** stores immutable image bytes by SHA-256 OID.
+- **Library Git repositories** store Git LFS pointer files and append-only NDJSON metadata events.
+- **Derived JSON indexes** materialize the gallery state used by HTTP reads.
 
-The HTTP server combines these concerns for a local prototype. Ingest uploads image bytes to the LFS server, writes repository files, appends an event, commits pointer/event changes, then applies the event to the derived JSON indexes. Reads render gallery HTML from the derived image-state index and proxy image bytes from the LFS server by OID.
+The HTTP server combines these concerns for a local prototype. Ingest uploads image bytes to the LFS server, writes repository files, appends an event, commits pointer and event changes, then applies the event to the derived JSON indexes. Reads render gallery HTML from the derived image-state index and proxy image bytes from the LFS server by OID.
 
 ## Architectural Goals Implied by the Code
 
@@ -105,7 +105,7 @@ The store keeps the cursor in memory once written. A new store instance does not
 
 ### Git boundary
 
-Git operations are localized to `Init` and `stageAndCommit`. `Init` handles clone/setup. `stageAndCommit` stages selected paths and creates a commit in the library repository. `handleIngest` chooses the staged paths and commit message.
+Git operations are localized to `Init` and `stageAndCommit`. `Init` handles clone and setup. `stageAndCommit` stages selected paths and creates a commit in the library repository. `handleIngest` chooses the staged paths and commit message.
 
 ### Rendering boundary
 
@@ -120,7 +120,7 @@ The request path uses the inline renderer. The cached renderer is a separate mod
 
 ### Startup flow
 
-```text
+```
 server process
   -> construct JsonFileIndexStore
   -> read index/next_image_id synchronously
@@ -134,7 +134,7 @@ The startup rebuild check happens after constructing the JSON store. This means 
 
 ### Ingest flow
 
-```text
+```
 client multipart POST /ingest
   -> request boundary validates image field and tags JSON
   -> content boundary computes SHA-256 OID
@@ -152,7 +152,7 @@ This path is synchronous. The client waits for LFS, filesystem, Git, and JSON-in
 
 ### Image-serving flow
 
-```text
+```
 gallery request
   -> DerivedIndexStore.listImages()
   -> HTML includes /image/{oid}
@@ -167,7 +167,7 @@ The booru does not maintain a blob cache. Image bytes are fetched from the LFS s
 
 ### Replay flow
 
-```text
+```
 startup replay
   -> choose JSON store and NDJSON event log
   -> read cursor from store memory
@@ -183,7 +183,7 @@ The event reducer mutates in-memory image and tag records. File persistence and 
 
 A library repository contains canonical small-file history and derived local state:
 
-```text
+```
 events/*.ndjson        canonical metadata events
 images/*               Git LFS pointer files
 index/next_image_id    local write-path ID sequence
@@ -211,7 +211,7 @@ JSON index writes use a temp-file-and-rename pattern per file. The store writes 
 - The hardcoded server configuration assumes an LFS server at `localhost:8080` and a local library at `libraries/new`.
 - `handleIngest` assumes `store.getCursor()` returns a non-null cursor before event append. The JSON store does not satisfy that assumption after construction unless an event has been applied or a cursor has been saved in memory.
 
-## Trust and Failure Boundaries
+## Trust, Error, and Failure Boundaries
 
 ### Request input
 
