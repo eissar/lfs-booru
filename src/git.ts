@@ -2,6 +2,7 @@ import { fromFileUrl, join, resolve } from '@std/path';
 import { simpleGit } from 'simple-git';
 import { debug } from '@/logging.ts';
 import { panic } from '@/util.ts';
+import { LibraryConnection as LibraryConn } from './library.ts';
 
 // do this in the future for the user
 // const DOCUMENTS = process.env.XDG_DOCUMENTS_DIR || `${process.env.HOME}/Documents`;
@@ -64,4 +65,22 @@ export async function Init(repoPath: string): Promise<null | Error> {
     // parse .INI at .lfsconfig -> assert lfs.url
     // parse gitconfig -> assert lfs.skipSmudge
     return null;
+}
+
+/**
+ * @throws GitConstructError, GitError, GitPluginError, GitResponseError, TaskConfigurationError
+ * bubbling from any error from add / commit
+ */
+export async function stageAndCommit(
+    paths: string[],
+    message: string,
+    lib: LibraryConn,
+): Promise<void> {
+    const git = simpleGit(lib.path);
+
+    await git.add(paths)
+        .then((result) => debug(result));
+
+    await git.commit(message, paths)
+        .then((result) => debug(result));
 }
