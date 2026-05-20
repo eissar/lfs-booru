@@ -72,41 +72,10 @@ export async function handleRoot(store: DerivedIndexStore): Promise<Response> {
 }
 
 export async function internalIngest(
-    bytes: Uint8Array<ArrayBuffer>,
     lib: LibraryConnection,
     eventLog: EventLog,
-    conn: LfsConn,
     e: AddEvent,
-    size: number,
 ): Promise<Response | void> {
-    const pointerPath = join(lib.path, e.path);
-
-    const metaRes = await PutObjectMeta(conn, e.oid, size);
-    debug({ lfsMetaOk: metaRes.ok, lfsMetaStatus: metaRes.status });
-    if (!metaRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS metadata registration failed: ${metaRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    const lfsRes = await PutObjectContent(conn, e.oid, new Blob([bytes]));
-    debug({ lfsOk: lfsRes.ok, lfsStatus: lfsRes.status });
-    if (!lfsRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    await writePointerFile(e.oid, size, pointerPath)
-        .catch(() => {
-            return new Response(
-                JSON.stringify({ error: `failed to write pointer at ${pointerPath}` }),
-                { status: 502, headers: { 'Content-Type': 'application/json' } },
-            );
-        });
-
     const git = simpleGit(lib.path);
 
     const ingestError = await eventLog.appendWithRollback(e, async (appendResult) => {
@@ -218,7 +187,35 @@ export async function handleIngest(
         mtime,
     };
 
-    const result = await internalIngest(bytes, lib, eventLog, conn, event, size);
+    const metaRes = await PutObjectMeta(conn, event.oid, size);
+    debug({ lfsMetaOk: metaRes.ok, lfsMetaStatus: metaRes.status });
+    if (!metaRes.ok) {
+        return new Response(
+            JSON.stringify({ error: `LFS metadata registration failed: ${metaRes.status}` }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+        );
+    }
+
+    const lfsRes = await PutObjectContent(conn, event.oid, new Blob([bytes]));
+    debug({ lfsOk: lfsRes.ok, lfsStatus: lfsRes.status });
+    if (!lfsRes.ok) {
+        return new Response(
+            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+        );
+    }
+
+    const pointerPath = join(lib.path, event.path);
+
+    await writePointerFile(event.oid, size, pointerPath)
+        .catch(() => {
+            return new Response(
+                JSON.stringify({ error: `failed to write pointer at ${pointerPath}` }),
+                { status: 502, headers: { 'Content-Type': 'application/json' } },
+            );
+        });
+
+    const result = await internalIngest(lib, eventLog, event);
     if (result) return result;
 
     return new Response(JSON.stringify({ id: id }), {
