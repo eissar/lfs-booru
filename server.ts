@@ -3,7 +3,7 @@ import { NdjsonEventLog } from '@/event_log.ts';
 import { handleImage, handleIngest, handleRoot } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents } from '@/indexer.ts';
-import { Connection as BooruConn } from '@/lfs/api.ts';
+import { LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { serveDir } from '@std/http/file-server';
 
 import { LibraryConnection as LibConn } from '@/library.ts';
@@ -11,7 +11,7 @@ import { debug } from '@/logging.ts';
 
 const LFS_SERVER = 'http://localhost:8080';
 
-const conn: BooruConn = {
+const conn: LfsConn = {
     url: LFS_SERVER,
     auth: `Basic ${btoa('user:pass')}`,
     user: 'USER',
@@ -21,7 +21,7 @@ const conn: BooruConn = {
 function createHandler(
     store: DerivedIndexStore,
     eventLog: EventLog,
-    conn: BooruConn,
+    conn: LfsConn,
     lib: LibConn,
 ): (req: Request) => Promise<Response> {
     return async (req: Request): Promise<Response> => {
