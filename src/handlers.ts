@@ -1,11 +1,11 @@
 import type { DerivedIndexStore } from './index_store.ts';
 import type { EventLog } from './event_log.ts';
-import { GetObjectContent, LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from './lfs/api.ts';
+import { GetObjectContent, LfsConnection as LfsConn } from './lfs/api.ts';
 import { LibraryConnection } from './library.ts';
 import { debug } from './logging.ts';
-import { join } from '@std/path';
 import { simpleGit } from 'simple-git';
-import { writePointerFile } from '@/pointer.ts';
+import { ingestFile } from '@/ingest.ts';
+import { c } from '@/util.ts';
 
 // /** @description */
 type ImageState = {
@@ -122,103 +122,25 @@ export async function handleIngest(
     lib: LibraryConnection,
     conn: LfsConn,
 ): Promise<Response> {
-    const form = await req.formData();
-
-    const file = form.get('image') as File | null;
-    if (!file) {
-        return new Response(
-            JSON.stringify({ error: "missing 'image' file field" }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-
-    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const oid = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-
-    // don't check for duplicates; we allow duplicates
-    // storage is content addressible
-    // we can async check for duplicates by image signature
-    // later.
-
-    const size = bytes.byteLength;
-
-    // const ids = Object.keys(state).map(Number);
-    // const nextId = Math.max(...ids, 0) + 1;
-
-    const tagsRaw = (form.get('tags') as string) || '[]';
-
-    const tags = await Promise.resolve(tagsRaw)
-        .then((raw) => JSON.parse(raw))
-        .then((parsed) => {
-            if (!Array.isArray(parsed)) return null;
-            if (!parsed.every((item) => typeof item === 'string')) return null;
-            return parsed as string[];
-        })
-        .catch(() => null);
-
-    if (!tags) {
-        return new Response(
-            JSON.stringify({ error: 'tags must be a JSON array of strings' }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    // TODO: parse image with async job to set dimensions ?
-    const height = parseInt((form.get('height') as string) || '0') || 0;
-    const width = parseInt((form.get('width') as string) || '0') || 0;
-
-    const mtime = (form.get('mtime') as string) || new Date().toISOString();
-
-    const id = await store.allocateImageId();
-    const name = (form.get('name') as string) || `Image ${id}`;
-
-    const event: AddEvent = {
-        op: 'add',
-        id: id,
-        path: `images/${id}.png`,
-        oid,
-        tags,
-        width,
-        height,
-        name,
-        mtime,
-    };
-
-    const metaRes = await PutObjectMeta(conn, event.oid, size);
-    debug({ lfsMetaOk: metaRes.ok, lfsMetaStatus: metaRes.status });
-    if (!metaRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS metadata registration failed: ${metaRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    const lfsRes = await PutObjectContent(conn, event.oid, new Blob([bytes]));
-    debug({ lfsOk: lfsRes.ok, lfsStatus: lfsRes.status });
-    if (!lfsRes.ok) {
-        return new Response(
-            JSON.stringify({ error: `LFS push failed: ${lfsRes.status}` }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
-    }
-
-    const pointerPath = join(lib.path, event.path);
-
-    await writePointerFile(event.oid, size, pointerPath)
-        .catch(() => {
-            return new Response(
-                JSON.stringify({ error: `failed to write pointer at ${pointerPath}` }),
-                { status: 502, headers: { 'Content-Type': 'application/json' } },
-            );
+    const event: AddEvent | Response = await ingestFile(lib, conn, req, store)
+        .catch((e) => {
+            if (e.cause instanceof Response) {
+                // upstream error
+                // we can match url, path here if we want later.
+                // if (new URL(e.cause.url).origin === conn.url)
+                //
+                // for now only upstream with cause:response is lfs-server
+                // errors
+                return c.error(e.message, 502);
+            }
+            return c.error(e.message, 400);
         });
+    if (event instanceof Response) return event; // error
 
     const result = await internalIngest(lib, eventLog, event);
     if (result) return result;
 
-    return new Response(JSON.stringify({ id: id }), {
+    return new Response(JSON.stringify({ id: event.id }), {
         status: 201,
         headers: { 'Content-Type': 'application/json' },
     });
