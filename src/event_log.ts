@@ -40,7 +40,10 @@ export interface EventLog {
      * @param fn Operation that must succeed for the append to be kept.
      * @returns Resolves after the callback succeeds and the append is kept.
      */
-    appendWithRollback(event: Event, fn: (appendResult: EventAppendResult) => Promise<void>): Promise<void>;
+    appendWithRollback(
+        event: Event,
+        fn: (appendResult: EventAppendResult) => Promise<void>,
+    ): Promise<EventAppendResult>;
 }
 
 // don't expose this in EventLog
@@ -138,7 +141,10 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
      * @param fn Operation that must succeed for the append to be kept.
      * @returns Resolves after the callback succeeds and the append is kept.
      */
-    async appendWithRollback(event: Event, fn: (appendResult: EventAppendResult) => Promise<void>): Promise<void> {
+    async appendWithRollback(
+        event: Event,
+        fn: (appendResult: EventAppendResult) => Promise<void>,
+    ): Promise<EventAppendResult> {
         using _lock = await this.mu.acquire();
         const eventFile = getCurrentEventShard();
         const path = join(eventsDir, eventFile);
@@ -178,6 +184,8 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
             await Deno.truncate(absolutePath, appendResult.previousOffset);
             throw error;
         }
+
+        return appendResult;
     }
 
     /**
