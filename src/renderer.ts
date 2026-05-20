@@ -1,7 +1,13 @@
 import { join } from '@std/path';
 import type { ImageState } from './indexer.ts';
 import { escape } from '@std/html/entities';
-import { html } from 'htm/preact';
+
+function html(strings: TemplateStringsArray, ...values: unknown[]): string {
+    return strings.reduce((result, string, index) => {
+        const value = index < values.length ? String(values[index]) : '';
+        return result + string + value;
+    }, '');
+}
 
 /**
  * Image state with the derived index identifier attached.
