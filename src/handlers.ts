@@ -1,11 +1,12 @@
-import type { DerivedIndexStore } from './index_store.ts';
+import { stageAndCommit } from './git.ts';
+import { ingestFile } from './ingest.ts';
+import { c } from './util.ts';
+import { Mutex } from '@core/asyncutil/mutex';
+import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
 import type { EventLog } from './event_log.ts';
+import type { DerivedIndexStore } from './index_store.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from './lfs/api.ts';
 import { LibraryConnection } from './library.ts';
-import { debug } from './logging.ts';
-import { simpleGit } from 'simple-git';
-import { ingestFile } from '@/ingest.ts';
-import { c } from '@/util.ts';
 
 // /** @description */
 type ImageState = {
@@ -71,49 +72,7 @@ export async function handleRoot(store: DerivedIndexStore): Promise<Response> {
     });
 }
 
-export async function internalIngest(
-    lib: LibraryConnection,
-    eventLog: EventLog,
-    e: AddEvent,
-): Promise<Response | void> {
-    const git = simpleGit(lib.path);
-
-    const ingestError = await eventLog.appendWithRollback(e, async (appendResult) => {
-        await git.add([e.path, appendResult.path])
-            .then((result) => debug(result))
-            .catch((err: unknown) => {
-                throw new Response(
-                    JSON.stringify({
-                        error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
-                    }),
-                    { status: 500, headers: { 'Content-Type': 'application/json' } },
-                );
-            });
-
-        await git.commit(
-            `booru: add image ${e.id}`,
-            [e.path, appendResult.path],
-        )
-            .then((result) => debug(result))
-            .catch((err: unknown) => {
-                throw new Response(
-                    JSON.stringify({
-                        error: `git commit failed: ${err instanceof Error ? err.message : String(err)}`,
-                    }),
-                    { status: 500, headers: { 'Content-Type': 'application/json' } },
-                );
-            });
-    })
-        .then(() => null)
-        .catch((err: unknown) => {
-            if (err instanceof Response) return err;
-            return new Response(
-                JSON.stringify({ error: `ingest failed: ${err instanceof Error ? err.message : String(err)}` }),
-                { status: 500, headers: { 'Content-Type': 'application/json' } },
-            );
-        });
-    if (ingestError) return ingestError;
-}
+const ingestWriteMutex = new Mutex();
 
 export async function handleIngest(
     req: Request,
@@ -137,13 +96,42 @@ export async function handleIngest(
         });
     if (event instanceof Response) return event; // error
 
-    const result = await internalIngest(lib, eventLog, event);
-    if (result) return result;
+    using _lock = await ingestWriteMutex.acquire();
 
-    return new Response(JSON.stringify({ id: event.id }), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
+    const cursor = store.getCursor();
+    if (!cursor) throw new Error('could not retrieve cursor from DerivedIndexStore');
+
+    const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+        // pass relative file paths
+        await stageAndCommit([appendResult.path, event.path], `booru: add image ${event.id}`, lib)
+            .catch((err) => {
+                if (err instanceof TaskConfigurationError || err instanceof GitConstructError) {
+                    // we passed invalid or malformed commands, inputs to stageAndCommit
+                    throw err;
+                }
+                if (err instanceof GitError) { // also GitResponseError
+                    // other errors during git commit
+                    throw err;
+                }
+                throw err;
+            });
+    }).catch((err: unknown) => {
+        if (err instanceof Response) return err; // when does this happen?
+        return c.error(`ingest failed: ${err instanceof Error ? err.message : String(err)}`, 500);
     });
+
+    // we can make this more specific
+    if (appendResult instanceof Error) return c.error(`error during event writing.`, 500);
+    if (appendResult instanceof Response) return appendResult; // when does this happen?
+
+    // apply after everything happened without err
+    const applyResult = await store.applyEvent(event, appendResult.cursor)
+        .catch(() => {
+            return c.error('ERROR: could not apply event');
+        });
+    if (applyResult instanceof Response) return applyResult;
+
+    return c.text('ok', 201);
 }
 
 export async function handleImage(req: Request, conn: LfsConn): Promise<Response> {
