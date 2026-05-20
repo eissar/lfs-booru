@@ -1,7 +1,8 @@
 export const LFS_MEDIA_TYPE = 'application/vnd.git-lfs+json';
 export const LFS_CONTENT_MEDIA_TYPE = 'application/vnd.git-lfs';
 
-export type Connection = {
+export type LfsConnection = {
+    /** url to the lfs server */
     url: string;
     auth: string;
     user: string;
@@ -62,7 +63,7 @@ export type UploadInput = UploadMetaInput & {
     body: BodyInit;
 };
 
-function objectsUrl(conn: Connection): URL {
+function objectsUrl(conn: LfsConnection): URL {
     if (conn.user !== '' || conn.repo !== '') {
         const prefix = `/${encodeURIComponent(conn.user)}/${encodeURIComponent(conn.repo)}`;
         return new URL(`${prefix}/objects`, conn.url);
@@ -70,10 +71,10 @@ function objectsUrl(conn: Connection): URL {
     return new URL('objects', conn.url);
 }
 
-function objectUrl(conn: Connection, oid: string): URL {
+function objectUrl(conn: LfsConnection, oid: string): URL {
     return new URL(`${objectsUrl(conn).pathname}/${encodeURIComponent(oid)}`, conn.url);
 }
-export async function PutObjectMeta(conn: Connection, oid: string, size: number, h?: HeadersInit) {
+export async function PutObjectMeta(conn: LfsConnection, oid: string, size: number, h?: HeadersInit) {
     const url = objectsUrl(conn);
 
     const requestHeaders = new Headers(h);
@@ -91,7 +92,7 @@ export async function PutObjectMeta(conn: Connection, oid: string, size: number,
 // - PUT
 //     - Upload/store raw object bytes for that OID
 //     - Returns 200 on success, 404 if metadata for OID not found, 500 on store failure
-export async function PutObjectContent(conn: Connection, oid: string, body: BodyInit, h?: HeadersInit) {
+export async function PutObjectContent(conn: LfsConnection, oid: string, body: BodyInit, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -114,7 +115,7 @@ export async function PutObjectContent(conn: Connection, oid: string, body: Body
 
 // - GET
 //     - Accept: application/vnd.git-lfs+json → return JSON metadata (Representation) with hypermedia links
-export async function GetObjectMeta(conn: Connection, oid: string, h?: HeadersInit) {
+export async function GetObjectMeta(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -129,7 +130,7 @@ export async function GetObjectMeta(conn: Connection, oid: string, h?: HeadersIn
 }
 // - GET
 //     - Accept: application/octet-stream → download raw object bytes (supports Range, can return 206)
-export async function GetObjectContent(conn: Connection, oid: string, h?: HeadersInit) {
+export async function GetObjectContent(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);
@@ -146,7 +147,7 @@ export async function GetObjectContent(conn: Connection, oid: string, h?: Header
 // returns
 // {"oid":"b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","size":3574,"actions":{"download":{"href":"http://localhost:8080/objects/b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","header":{"Accept":"application/vnd.git-lfs"},"expires_at":"0001-01-01T00:00:00Z"}}}
 // useful for existence/range checks
-export async function HeadObjectMeta(conn: Connection, oid: string, h?: HeadersInit) {
+export async function HeadObjectMeta(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
     const requestHeaders = new Headers(h);

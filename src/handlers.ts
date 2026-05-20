@@ -1,6 +1,6 @@
 import type { DerivedIndexStore } from './index_store.ts';
 import type { EventLog } from './event_log.ts';
-import { Connection as BooruConn, GetObjectContent, PutObjectContent, PutObjectMeta } from './lfs/api.ts';
+import { GetObjectContent, LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from './lfs/api.ts';
 import { LibraryConnection } from './library.ts';
 import { debug } from './logging.ts';
 import { dirname, join } from '@std/path';
@@ -74,7 +74,7 @@ export async function internalIngest(
     bytes: Uint8Array<ArrayBuffer>,
     lib: LibraryConnection,
     eventLog: EventLog,
-    conn: BooruConn,
+    conn: LfsConn,
     e: AddEvent,
     size: number,
 ): Promise<Response | void> {
@@ -147,7 +147,7 @@ export async function handleIngest(
     store: DerivedIndexStore,
     eventLog: EventLog,
     lib: LibraryConnection,
-    conn: BooruConn,
+    conn: LfsConn,
 ): Promise<Response> {
     const form = await req.formData();
 
@@ -223,7 +223,7 @@ export async function handleIngest(
     });
 }
 
-export async function handleImage(req: Request, conn: BooruConn): Promise<Response> {
+export async function handleImage(req: Request, conn: LfsConn): Promise<Response> {
     const url = new URL(req.url);
     const oid = url.pathname.split('/')[2];
     return await GetObjectContent(conn, oid);
