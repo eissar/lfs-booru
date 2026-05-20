@@ -67,12 +67,19 @@ export class CachingHtmlRenderer implements HtmlRenderer {
 
     /**
      * Render one image card fragment.
+     * this does not get cached
      *
      * @param image Image record to render.
      * @returns Rendered HTML fragment.
      */
     renderImageCard(image: GalleryImage): Promise<string> {
-        const tags = image.tags.length === 0 ? 'none' : image.tags.map((tag) => escape(tag)).join(', ');
+        let tags: string;
+
+        if (image.tags.length === 0) {
+            tags = 'none';
+        } else {
+            tags = image.tags.map((tag) => escape(tag)).join(', ');
+        }
 
         return Promise.resolve(html`
             <div style="border: 1px solid #ccc; padding: 10px; max-width: 350px;">
