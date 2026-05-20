@@ -39,6 +39,15 @@ export const c = {
             },
         ),
 
+    html: (html: string, status: number = 200): Response =>
+        new Response(
+            html,
+            {
+                status,
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            },
+        ),
+
     error: (
         message: string,
         status: number = 500,
