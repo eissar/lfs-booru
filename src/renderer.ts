@@ -98,7 +98,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         title: string;
         cards: string[];
     }): Promise<string> {
-        const cacheKey = await sha256Hex(JSON.stringify({
+        const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
             version: this.version,
             title: input.title,
@@ -116,7 +116,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         const html = renderGalleryPageTemplate(input.title, input.cards, this.version);
         await Deno.mkdir(cacheDir, { recursive: true });
 
-        const tmpPath = join(cacheDir, `${cacheKey}.${crypto.randomUUID()}.tmp`);
+        const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
         await Deno.writeTextFile(tmpPath, html);
         await Deno.rename(tmpPath, cachePath).catch(async (error) => {
             await Deno.remove(tmpPath).catch((removeError) => {
@@ -155,8 +155,8 @@ function renderGalleryPageTemplate(
     `;
 }
 
-async function sha256Hex(value: string): Promise<string> {
-    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+async function sha1Hex(value: string): Promise<string> {
+    const hash = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(value));
     return Array.from(new Uint8Array(hash))
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
