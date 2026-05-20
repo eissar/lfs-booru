@@ -1,11 +1,12 @@
 import { basename, join } from '@std/path';
-import { Connection as LfsConn } from '@/lfs/api.ts';
+import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
 import { panic } from '@/util.ts';
 import { LibraryConnection } from '@/library.ts';
-import { Init } from '@/git.ts';
+import { Init, stageAndCommit } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
-import { internalIngest } from '@/handlers.ts';
-import { NdjsonEventLog } from '@/event_log.ts';
+import { AddEvent } from '@/handlers.ts';
+import { writePointerFile } from './pointer.ts';
+import { NdjsonEventLog, type EventAppendResult } from '@/event_log.ts';
 
 for (const type of ['unhandledrejection', 'error']) {
     globalThis.addEventListener(type, (e) => {
@@ -120,6 +121,43 @@ async function examplePngs(): Promise<string[]> {
     return paths.slice(0, 5);
 }
 
+async function internalIngest(
+    bytes: Uint8Array,
+    conn: LfsConn,
+    lib: LibraryConnection,
+    eventLog: NdjsonEventLog,
+    event: AddEvent,
+): Promise<string | null> {
+    const size = bytes.byteLength;
+
+    await PutObjectMeta(conn, event.oid, size).then((res) => {
+        if (!res.ok) {
+            throw new Error('put object meta failed', { cause: res });
+        }
+    });
+    await PutObjectContent(conn, event.oid, new Blob([bytes.buffer as ArrayBuffer])).then((res) => {
+        if (!res.ok) {
+            throw new Error('LFS Push failed', { cause: res });
+        }
+    });
+
+    const pointerPath = join(lib.path, event.path);
+    await writePointerFile(event.oid, size, pointerPath);
+
+    const appendResult: EventAppendResult = await eventLog.appendWithRollback(
+        event,
+        async (appendResult) => {
+            await stageAndCommit(
+                [appendResult.path, event.path],
+                `booru: add image ${event.id}`,
+                lib,
+            );
+        },
+    );
+
+    return null;
+}
+
 if (import.meta.main) {
     const scriptStart = performance.now();
     const timings: ImageTiming[] = [];
@@ -151,22 +189,24 @@ if (import.meta.main) {
         const [{ width, height }, dimensionsMs] = await timed(() => pngDimensions(bytes));
         const [stat, statMs] = await timed(() => Deno.stat(imagePath));
 
-        const [result, ingestMs] = await timed(() =>
-            internalIngest(bytes, lib, eventLog, conn, {
-                op: 'add',
-                id,
-                path: `images/${id}.png`,
-                oid,
-                tags: [],
-                width,
-                height,
-                name: basename(imagePath),
-                mtime: (stat.mtime ?? new Date()).toISOString(),
-            }, bytes.byteLength)
+        const event: AddEvent = {
+            op: 'add',
+            id,
+            path: `images/${id}.png`,
+            oid,
+            tags: [],
+            width,
+            height,
+            name: basename(imagePath),
+            mtime: (stat.mtime ?? new Date()).toISOString(),
+        };
+
+        const [ingestError, ingestMs] = await timed(() =>
+            internalIngest(bytes, conn, lib, eventLog, event)
         );
 
-        if (result) {
-            console.error(await result.text());
+        if (ingestError) {
+            console.error(ingestError);
             Deno.exit(1);
         }
 
