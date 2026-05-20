@@ -2,7 +2,7 @@ import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { handleImage, handleIngest } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
-import { processEvents } from '@/indexer.ts';
+import { processEvents, ImageState } from '@/indexer.ts';
 import { LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { serveDir } from '@std/http/file-server';
 
@@ -10,6 +10,7 @@ import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
 import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
 import { c } from '@/util.ts';
+import { join } from '@std/path';
 
 const LFS_SERVER = 'http://localhost:8080';
 
@@ -44,7 +45,18 @@ function createHandler(
         }
 
         if (url.pathname === '/gallery') {
-            const imageList = store.listImages();
+            const tags = url.searchParams.get('tags');
+            const tagList = tags && tags.split(',') || [];
+
+            const tagIndex = JSON.parse(Deno.readTextFileSync(join(lib.path, 'index', 'tag_index.json')));
+            const ids = Object.keys(tagIndex)
+                .filter((key) => tagList.includes(key))
+                .flatMap((key) => tagIndex[key]) || [];
+
+            let imageList: AsyncIterable<[string, ImageState]>;
+
+            imageList = store.listImages();
+            if (ids.length > 0) imageList = store.listImagesByIds(ids);
 
             const images: GalleryImage[] = [];
             for await (const [id, img] of imageList) {
