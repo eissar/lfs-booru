@@ -3,8 +3,9 @@ import type { EventLog } from './event_log.ts';
 import { GetObjectContent, LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from './lfs/api.ts';
 import { LibraryConnection } from './library.ts';
 import { debug } from './logging.ts';
-import { dirname, join } from '@std/path';
+import { join } from '@std/path';
 import { simpleGit } from 'simple-git';
+import { writePointerFile } from '@/pointer.ts';
 
 // /** @description */
 type ImageState = {
@@ -78,7 +79,6 @@ export async function internalIngest(
     e: AddEvent,
     size: number,
 ): Promise<Response | void> {
-    const pointer = `version https://git-lfs.github.com/spec/v1\noid sha256:${e.oid}\nsize ${size}\n`;
     const pointerPath = join(lib.path, e.path);
 
     const metaRes = await PutObjectMeta(conn, e.oid, size);
@@ -99,9 +99,13 @@ export async function internalIngest(
         );
     }
 
-    // pointerPath - yyyy-mm.ndjson
-    await Deno.mkdir(dirname(pointerPath), { recursive: true });
-    await Deno.writeTextFile(pointerPath, pointer);
+    await writePointerFile(e.oid, size, pointerPath)
+        .catch(() => {
+            return new Response(
+                JSON.stringify({ error: `failed to write pointer at ${pointerPath}` }),
+                { status: 502, headers: { 'Content-Type': 'application/json' } },
+            );
+        });
 
     const git = simpleGit(lib.path);
 
