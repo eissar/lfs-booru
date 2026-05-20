@@ -26,7 +26,7 @@ type ImageState = {
 //     Update = 'update',
 // }
 
-type Event = {
+export type Event = {
     op: string;
     id: number;
     path: string;
@@ -39,7 +39,7 @@ type Event = {
 };
 
 // Narrow Event to add operations — internalIngest only handles image ingestion
-type AddEvent = Event & { op: 'add' };
+export type AddEvent = Event & { op: 'add' };
 
 type GalleryImage = ImageState & { id: string };
 
