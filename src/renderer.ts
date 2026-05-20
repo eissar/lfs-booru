@@ -1,5 +1,5 @@
 import { join } from '@std/path';
-import type { ImageState } from './indexer.ts';
+import type { ImageState } from '@/indexer.ts';
 import { escape } from '@std/html/entities';
 
 function html(strings: TemplateStringsArray, ...values: unknown[]): string {
@@ -72,21 +72,34 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @param image Image record to render.
      * @returns Rendered HTML fragment.
      */
-    renderImageCard(image: GalleryImage): Promise<string> {
-        let tags: string;
+    async renderImageCard(image: GalleryImage): Promise<string> {
+        const imageSrc = `/image/${image.oid}`;
 
-        if (image.tags.length === 0) {
-            tags = 'none';
-        } else {
-            tags = image.tags.map((tag) => escape(tag)).join(', ');
-        }
+        // TODO: move somewhere or inline
+        const renderTagTemplate = (tag: string) => {
+            let tagUrl: string = '/gallery';
+
+            const search = new URLSearchParams();
+            // should escape tags? or just
+            // sanitize in ingest?
+            search.append('tags', tag);
+
+            const query = search.toString();
+            if (query) tagUrl = `/gallery?${query}`;
+
+            return html`
+                <a class="image-card-tags" href="${tagUrl}">${tag}</a>
+            `;
+        };
+
+        const tags: string = image.tags.map(renderTagTemplate).join('\n');
 
         return Promise.resolve(html`
             <div style="border: 1px solid #ccc; padding: 10px; max-width: 350px;">
                 <p><strong>${escape(image.name)}</strong></p>
-                <p>Tags: ${tags}</p>
+                <div>Tags: ${tags}</div>
                 <p>${image.width}×${image.height}</p>
-                <img src="/image/${encodeURIComponent(image.oid)}" style="max-width: 300px;" />
+                <img src="${escape(imageSrc)}" style="max-width: 300px;" />
             </div>
         `);
     }

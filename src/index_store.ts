@@ -61,6 +61,8 @@ export interface DerivedIndexStore {
 
     listImages(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
 
+    listImagesByIds(ids: string[], options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
+
     /**
      * Return aggregate counts for derived index records.
      *
@@ -189,6 +191,33 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         let yielded = 0;
         for (const entry of entries) {
             yield entry;
+            yielded++;
+            if (yielded >= limit) return;
+        }
+    }
+
+    async *listImagesByIds(
+        ids: string[],
+        options: { limit?: number } = {},
+    ): AsyncIterable<[string, ImageState]> {
+        if (ids.length === 0) return;
+
+        let entries: [string, ImageState][];
+
+        {
+            using _lock = await this.mu.acquire();
+            const statePath = join(this.conn.path, 'index', 'image_state.json');
+            const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+            entries = Object.entries(imageState);
+        }
+        const limit = options.limit ?? Infinity;
+        if (limit <= 0) return;
+
+        let yielded = 0;
+        for (const [id, image] of entries) {
+            if (!ids.includes(id)) continue;
+            yield [id, image];
+
             yielded++;
             if (yielded >= limit) return;
         }
