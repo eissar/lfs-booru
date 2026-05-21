@@ -5,17 +5,17 @@ import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
 import { join } from '@std/path';
 
-export async function ingestFile(
+export async function ingest(
     lib: LibConn,
     conn: LfsConn,
-    req: Request,
     store: DerivedIndexStore,
+    file: File,
+    tags: string[],
+    name?: string,
+    height?: number,
+    width?: number,
+    mtime?: string,
 ): Promise<AddEvent> {
-    const form = await req.formData();
-
-    const file = form.get('image') as File | null;
-    if (!file) throw new Error('missing form field: image');
-
     const bytes = new Uint8Array(await file.arrayBuffer());
 
     const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
@@ -29,30 +29,16 @@ export async function ingestFile(
 
     const size = bytes.byteLength;
 
-    // const ids = Object.keys(state).map(Number);
-    // const nextId = Math.max(...ids, 0) + 1;
-
-    const tagsRaw = (form.get('tags') as string) || '[]';
-
-    const tags = await Promise.resolve(tagsRaw)
-        .then((raw) => JSON.parse(raw))
-        .then((parsed) => {
-            if (!Array.isArray(parsed)) return null;
-            if (!parsed.every((item) => typeof item === 'string')) return null;
-            return parsed as string[];
-        })
-        .catch(() => null);
-
-    if (!tags) throw new Error('tags must be a JSON array of strings');
-
     // TODO: parse image with async job to set dimensions ?
-    const height = parseInt((form.get('height') as string) || '0') || 0;
-    const width = parseInt((form.get('width') as string) || '0') || 0;
+    //
+    // zero is falsy
+    if (!height) height = 0;
+    if (!width) width = 0;
 
-    const mtime = (form.get('mtime') as string) || new Date().toISOString();
+    if (!mtime) mtime = new Date().toISOString();
 
     const id = await store.allocateImageId();
-    const name = (form.get('name') as string) || `Image ${id}`;
+    if (!name) name = `Image ${id}`;
 
     const event: AddEvent = {
         op: 'add',
@@ -90,4 +76,35 @@ export async function ingestFile(
         });
 
     return event;
+}
+
+// parseFormData
+// -> ingest()
+export async function ingestFile(
+    lib: LibConn,
+    conn: LfsConn,
+    req: Request,
+    store: DerivedIndexStore,
+): Promise<AddEvent> {
+    const form = await req.formData();
+
+    const file = form.get('image') as File | null;
+    if (!file) throw new Error('missing form field: image');
+
+    const tagsRaw = (form.get('tags') as string) || '[]';
+
+    const tags = await Promise.resolve(tagsRaw)
+        .then((raw) => JSON.parse(raw))
+        .then((parsed) => {
+            if (!Array.isArray(parsed)) return null;
+            if (!parsed.every((item) => typeof item === 'string')) return null;
+            return parsed as string[];
+        })
+        .catch(() => null);
+
+    if (!tags) throw new Error('tags must be a JSON array of strings');
+
+    const name = form.get('name') as string;
+
+    return ingest(lib, conn, store, file, tags, name);
 }
