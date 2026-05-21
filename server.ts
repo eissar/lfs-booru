@@ -1,16 +1,19 @@
+import { serveDir } from '@std/http/file-server';
+import { join } from '@std/path';
+
+import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
+
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
-import { handleIngest } from '@/handlers.ts';
+import { stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
-import { processEvents, ImageState } from '@/indexer.ts';
-import { LfsConnection as LfsConn } from '@/lfs/api.ts';
-import { serveDir } from '@std/http/file-server';
-
+import { AddEvent, ImageState, processEvents } from '@/indexer.ts';
+import { ingestFile } from '@/ingest.ts';
+import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
 import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
 import { c } from '@/util.ts';
-import { join } from '@std/path';
 
 const LFS_SERVER = 'http://localhost:8080';
 
@@ -70,7 +73,52 @@ function createHandler(
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
-            return await handleIngest(req, store, eventLog, lib, conn);
+            const event: AddEvent | Response = await ingestFile(lib, conn, req, store)
+                .catch((e) => {
+                    if (e.cause instanceof Response) {
+                        // upstream error
+                        // we can match url, path here if we want later.
+                        // if (new URL(e.cause.url).origin === conn.url)
+                        //
+                        // for now only upstream with cause:response is lfs-server
+                        // errors
+                        return c.error(e.message, 502);
+                    }
+                    return c.error(e.message, 400);
+                });
+            if (event instanceof Response) return event; // error
+
+            const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+                // pass relative file paths
+                await stageAndCommit([appendResult.path, event.path], `booru: add image ${event.id}`, lib)
+                    .catch((err) => {
+                        if (err instanceof TaskConfigurationError || err instanceof GitConstructError) {
+                            // we passed invalid or malformed commands, inputs to stageAndCommit
+                            throw err;
+                        }
+                        if (err instanceof GitError) { // also GitResponseError
+                            // other errors during git commit
+                            throw err;
+                        }
+                        throw err;
+                    });
+            }).catch((err: unknown) => {
+                if (err instanceof Response) return err; // when does this happen?
+                return c.error(`ingest failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+            });
+
+            // we can make this more specific
+            if (appendResult instanceof Error) return c.error(`error during event writing.`, 500);
+            if (appendResult instanceof Response) return appendResult; // when does this happen?
+
+            // apply after everything happened without err
+            const applyResult = await store.applyEvent(event, appendResult.cursor)
+                .catch(() => {
+                    return c.error('ERROR: could not apply event');
+                });
+            if (applyResult instanceof Response) return applyResult;
+
+            return c.text('ok', 201);
         }
 
         if (url.pathname.startsWith('/static')) {

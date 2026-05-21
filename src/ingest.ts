@@ -1,6 +1,6 @@
 import { DerivedIndexStore } from '@/index_store.ts';
 import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
-import { AddEvent } from '@/handlers.ts';
+import { AddEvent } from './indexer.ts';
 import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
 import { join } from '@std/path';
