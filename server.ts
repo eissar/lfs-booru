@@ -8,7 +8,7 @@ import { NdjsonEventLog } from '@/event_log.ts';
 import { stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { AddEvent, ImageState, processEvents } from '@/indexer.ts';
-import { ingestFile } from '@/ingest.ts';
+import { ingest } from '@/ingest.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
@@ -73,7 +73,27 @@ function createHandler(
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
-            const event: AddEvent | Response = await ingestFile(lib, conn, req, store)
+            const form = await req.formData();
+
+            const file = form.get('image') as File | null;
+            if (!file) throw new Error('missing form field: image');
+
+            const tagsRaw = (form.get('tags') as string) || '[]';
+
+            const tags = await Promise.resolve(tagsRaw)
+                .then((raw) => JSON.parse(raw))
+                .then((parsed) => {
+                    if (!Array.isArray(parsed)) return null;
+                    if (!parsed.every((item) => typeof item === 'string')) return null;
+                    return parsed as string[];
+                })
+                .catch(() => null);
+
+            if (!tags) throw new Error('tags must be a JSON array of strings');
+
+            const name = form.get('name') as string;
+
+            const event: AddEvent | Response = await ingest(lib, conn, store, file, tags, name)
                 .catch((e) => {
                     if (e.cause instanceof Response) {
                         // upstream error
