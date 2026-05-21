@@ -2,7 +2,7 @@ import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
 import { escape } from '@std/html/entities';
 
-function html(strings: TemplateStringsArray, ...values: unknown[]): string {
+export function html(strings: TemplateStringsArray, ...values: unknown[]): string {
     return strings.reduce((result, string, index) => {
         const value = index < values.length ? String(values[index]) : '';
         return result + string + value;
