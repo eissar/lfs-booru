@@ -8,11 +8,11 @@ export default function imageCard(image: GalleryImage, tags: string): string {
     const imageName = escape(image.name);
 
     return html`
-        <div style="border: 1px solid #ccc; padding: 10px; max-width: 350px;">
+        <div>
             <p><strong>${imageName}</strong></p>
             <div>Tags: ${tags}</div>
             <p>${image.width}×${image.height}</p>
-            <img src="${imageSrc}" style="max-width: 300px;" />
+            <img src="${imageSrc}" />
         </div>
     `;
 }
