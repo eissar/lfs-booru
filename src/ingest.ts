@@ -77,34 +77,3 @@ export async function ingest(
 
     return event;
 }
-
-// parseFormData
-// -> ingest()
-export async function ingestFile(
-    lib: LibConn,
-    conn: LfsConn,
-    req: Request,
-    store: DerivedIndexStore,
-): Promise<AddEvent> {
-    const form = await req.formData();
-
-    const file = form.get('image') as File | null;
-    if (!file) throw new Error('missing form field: image');
-
-    const tagsRaw = (form.get('tags') as string) || '[]';
-
-    const tags = await Promise.resolve(tagsRaw)
-        .then((raw) => JSON.parse(raw))
-        .then((parsed) => {
-            if (!Array.isArray(parsed)) return null;
-            if (!parsed.every((item) => typeof item === 'string')) return null;
-            return parsed as string[];
-        })
-        .catch(() => null);
-
-    if (!tags) throw new Error('tags must be a JSON array of strings');
-
-    const name = form.get('name') as string;
-
-    return ingest(lib, conn, store, file, tags, name);
-}
