@@ -32,3 +32,4 @@ out/
 logs/
 
 *.internal.*
+.nvim.lua
