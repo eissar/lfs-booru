@@ -19,7 +19,7 @@ export default function gallery(
             </head>
             <body data-renderer-version="${escapedVersion}">
                 <h1>${escapedTitle}</h1>
-                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div>
                     ${cards.join('\n')}
                 </div>
             </body>
