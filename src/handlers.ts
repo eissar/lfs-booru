@@ -1,7 +1,6 @@
 import { stageAndCommit } from './git.ts';
 import { ingestFile } from './ingest.ts';
 import { c } from './util.ts';
-import { Mutex } from '@core/asyncutil/mutex';
 import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
 import type { EventLog } from './event_log.ts';
 import type { DerivedIndexStore } from './index_store.ts';
@@ -72,8 +71,6 @@ export async function handleRoot(store: DerivedIndexStore): Promise<Response> {
     });
 }
 
-const ingestWriteMutex = new Mutex();
-
 export async function handleIngest(
     req: Request,
     store: DerivedIndexStore,
@@ -95,11 +92,6 @@ export async function handleIngest(
             return c.error(e.message, 400);
         });
     if (event instanceof Response) return event; // error
-
-    using _lock = await ingestWriteMutex.acquire();
-
-    const cursor = store.getCursor();
-    if (!cursor) throw new Error('could not retrieve cursor from DerivedIndexStore');
 
     const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
         // pass relative file paths
