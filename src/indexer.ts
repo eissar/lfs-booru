@@ -2,6 +2,14 @@ import type { DerivedIndexStore } from './index_store.ts';
 import { EventLog, NdjsonEventLog } from './event_log.ts';
 import { panic } from './util.ts';
 
+// TODO: consider
+//
+// enum Op {
+//     Add    = 'add',
+//     Remove = 'remove',
+//     Update = 'update',
+// }
+
 export type ImageState = {
     oid: string;
     path: string;
@@ -12,7 +20,7 @@ export type ImageState = {
     mtime: string;
 };
 
-type AddEvent = {
+export type AddEvent = {
     op: 'add';
     id: number;
     oid: string;
@@ -24,19 +32,19 @@ type AddEvent = {
     mtime: string;
 };
 
-type TagAddEvent = {
+export type TagAddEvent = {
     op: 'tag_add';
     id: number;
     tag: string;
 };
 
-type TagRemoveEvent = {
+export type TagRemoveEvent = {
     op: 'tag_remove';
     id: number;
     tag: string;
 };
 
-type DeleteEvent = {
+export type DeleteEvent = {
     op: 'delete';
     id: number;
 };
