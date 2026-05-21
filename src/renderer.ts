@@ -1,13 +1,8 @@
 import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
 import { escape } from '@std/html/entities';
-
-export function html(strings: TemplateStringsArray, ...values: unknown[]): string {
-    return strings.reduce((result, string, index) => {
-        const value = index < values.length ? String(values[index]) : '';
-        return result + string + value;
-    }, '');
-}
+import { html } from '@/html.ts';
+import { templates } from '@/template/index.ts';
 
 /**
  * Image state with the derived index identifier attached.
@@ -73,8 +68,6 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @returns Rendered HTML fragment.
      */
     async renderImageCard(image: GalleryImage): Promise<string> {
-        const imageSrc = `/image/${image.oid}`;
-
         // TODO: move somewhere or inline
         const renderTagTemplate = (tag: string) => {
             let tagUrl: string = '/gallery';
@@ -94,14 +87,8 @@ export class CachingHtmlRenderer implements HtmlRenderer {
 
         const tags: string = image.tags.map(renderTagTemplate).join('\n');
 
-        return Promise.resolve(html`
-            <div style="border: 1px solid #ccc; padding: 10px; max-width: 350px;">
-                <p><strong>${escape(image.name)}</strong></p>
-                <div>Tags: ${tags}</div>
-                <p>${image.width}×${image.height}</p>
-                <img src="${escape(imageSrc)}" style="max-width: 300px;" />
-            </div>
-        `);
+        // wrap in promise to satisfy signature
+        return await Promise.resolve(templates.ImageCard(image, tags));
     }
 
     /**
@@ -133,7 +120,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = renderGalleryPageTemplate(input.title, input.cards, this.version);
+        const html = templates.Gallery(input.title, input.cards, this.version);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
@@ -147,32 +134,6 @@ export class CachingHtmlRenderer implements HtmlRenderer {
 
         return html;
     }
-}
-
-function renderGalleryPageTemplate(
-    title: string,
-    cards: string[],
-    version: string,
-): string {
-    const escapedTitle = escape(title);
-    const escapedVersion = escape(version);
-
-    return html`
-        <!DOCTYPE html>
-        <html lang="en">
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>${escapedTitle}</title>
-            </head>
-            <body data-renderer-version="${escapedVersion}">
-                <h1>${escapedTitle}</h1>
-                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    ${cards.join('\n')}
-                </div>
-            </body>
-        </html>
-    `;
 }
 
 async function sha1Hex(value: string): Promise<string> {
