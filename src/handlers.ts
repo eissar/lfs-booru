@@ -125,9 +125,3 @@ export async function handleIngest(
 
     return c.text('ok', 201);
 }
-
-export async function handleImage(req: Request, conn: LfsConn): Promise<Response> {
-    const url = new URL(req.url);
-    const oid = url.pathname.split('/')[2];
-    return await GetObjectContent(conn, oid);
-}

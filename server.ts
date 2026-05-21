@@ -1,6 +1,6 @@
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
-import { handleImage, handleIngest } from '@/handlers.ts';
+import { handleIngest } from '@/handlers.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents, ImageState } from '@/indexer.ts';
 import { LfsConnection as LfsConn } from '@/lfs/api.ts';
@@ -36,7 +36,9 @@ function createHandler(
         );
 
         if (url.pathname.startsWith('/image/')) {
-            return await handleImage(req, conn);
+            const url = new URL(req.url);
+            const oid = url.pathname.split('/')[2];
+            return await GetObjectContent(conn, oid);
         }
 
         if (url.pathname === '/') {
