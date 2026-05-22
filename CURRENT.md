@@ -258,3 +258,9 @@ A library repository:
 - The gallery page reads `tag_index.json` synchronously from disk for each request with tag filters, outside the store mutex.
 - Image IDs are numeric values stored as string keys in `image_state.json`.
 - The server calls `getCursor()` for the in-memory cursor check before event append during ingest, which can fail on a fresh store instance even when indexes exist.
+
+## Planned Work
+
+### Backlog
+
+- **Event log compaction / log minification** — Prune deleted-image events and consolidate the NDJSON event log so replay is faster and deleted images are removed from storage. Needs a compaction marker scheme or a log rewrite pass. Not yet scoped or scheduled.

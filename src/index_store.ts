@@ -111,8 +111,14 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     cursorCache: IndexCursor | null = null;
 
     getCursor(): IndexCursor | null {
-        // we do not need to use the mutex
-        // using _lock = await mu.acquire();
+        // deno is single threaded so no mutex is
+        // fine?
+        if (this.cursorCache) return this.cursorCache;
+        // we can assume this exists
+        const cursorPath = join(this.conn.path, 'event_cursor');
+
+        const c = JSON.parse(Deno.readTextFileSync(cursorPath)) as IndexCursor;
+        this.cursorCache = c;
         return this.cursorCache;
     }
 
@@ -126,10 +132,12 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
     async isInitialized(): Promise<boolean> {
         const nextImageIdIndex = join(this.conn.path, 'index', 'next_image_id');
+        const cursorPath = join(this.conn.path, 'event_cursor');
         const paths = [
             join(this.conn.path, 'index', 'image_state.json'),
             join(this.conn.path, 'index', 'tag_index.json'),
             nextImageIdIndex,
+            cursorPath,
         ];
 
         using _lock = await this.nextIdMutex.acquire();
