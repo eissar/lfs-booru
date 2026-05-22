@@ -2,6 +2,7 @@ import { dirname, join } from '@std/path';
 import type { Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
+import { isInt } from '@/util.ts';
 
 // TODO:
 // guard to detect file rotation (size < offset, or file switched)
@@ -152,7 +153,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const valid = await Deno.readTextFile(nextImageIdIndex)
             .then((t) => {
                 const id = Number(t.trim());
-                if (Number.isSafeInteger(id) && id >= 1) return true;
+                if (isInt(id) && id >= 1) return true;
                 return false;
             })
             .catch(() => {
@@ -236,9 +237,9 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
             const nextIdPath = join(this.conn.path, 'index', 'next_image_id');
             const text = await Deno.readTextFile(nextIdPath);
-            const currentNextId = Number.parseInt(text.trim());
+            const currentNextId = Number(text.trim());
 
-            if (!currentNextId || currentNextId < 1) {
+            if (!isInt(currentNextId) || currentNextId < 1) {
                 throw new Error(`Cannot apply add event ${event.id}: next image ID is "${text.trim()}"`);
             }
 
@@ -337,7 +338,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const text = await Deno.readTextFile(path);
         const id = Number(text.trim());
 
-        if (!Number.isSafeInteger(id) || id < 1) {
+        if (!isInt(id) || id < 1) {
             throw new Error(`Cannot allocate image ID: next image ID is "${text.trim()}"`);
         }
 

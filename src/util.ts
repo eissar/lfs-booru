@@ -3,6 +3,8 @@ export function panic(message: string, code = 1): never {
     Deno.exit(code);
 }
 
+export const isInt = Number.isSafeInteger as (v: unknown) => v is number;
+
 /**
  * Utility functions for creating HTTP response objects
  * @namespace
