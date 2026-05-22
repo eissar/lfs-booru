@@ -139,3 +139,5 @@ unless the abstraction materially improves correctness or eliminates important i
 
 > If the abstraction makes the call site harder to understand without providing proportional correctness or safety benefits, it is likely unnecessary.
 
+> DRY - only when warranted. Duplication is often cheaper than the wrong abstraction.
+

@@ -122,9 +122,14 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         return this.cursorCache;
     }
 
+    /**
+     * Persist the replay cursor and update the in-memory cursor cache.
+     *
+     * @param c Cursor position to persist.
+     * @returns Resolves after the cursor is written.
+     */
     async saveCursor(c: IndexCursor): Promise<void> {
         using _lock = await this.mu.acquire();
-
         const cursorPath = join(this.conn.path, 'event_cursor');
         await writeJsonFile(cursorPath, c);
         this.cursorCache = c;
@@ -217,7 +222,6 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
-        const cursorPath = join(this.conn.path, 'event_cursor');
 
         const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
         const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
@@ -228,8 +232,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         await writeJsonFile(statePath, imageState);
         await writeJsonFile(indexPath, tagIndex);
 
-        // TODO: this.saveCursor
-        // write to cursor last
+        // Write cursor last only after the derived indexes are durable.
+        const cursorPath = join(this.conn.path, 'event_cursor');
         await writeJsonFile(cursorPath, nextCursor);
         this.cursorCache = nextCursor;
     }
