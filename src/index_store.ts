@@ -114,12 +114,17 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         // deno is single threaded so no mutex is
         // fine?
         if (this.cursorCache) return this.cursorCache;
-        // we can assume this exists
         const cursorPath = join(this.conn.path, 'event_cursor');
 
-        const c = JSON.parse(Deno.readTextFileSync(cursorPath)) as IndexCursor;
-        this.cursorCache = c;
-        return this.cursorCache;
+        try {
+            const c = JSON.parse(Deno.readTextFileSync(cursorPath)) as IndexCursor;
+            this.cursorCache = c;
+            return this.cursorCache;
+        } catch (error) {
+            // null is handled equivalently to a cursor at the beginning of the event log.
+            if (error instanceof Deno.errors.NotFound) return null;
+            throw error;
+        }
     }
 
     /**
