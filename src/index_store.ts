@@ -227,10 +227,26 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
+        const cursorPath = join(this.conn.path, 'event_cursor');
 
         const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
         const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
         applyEventToIndexState(imageState, tagIndex, event);
+
+        if (event.op === 'add') {
+            using _idLock = await this.nextIdMutex.acquire();
+
+            const nextIdPath = join(this.conn.path, 'index', 'next_image_id');
+            const text = await Deno.readTextFile(nextIdPath);
+            const currentNextId = Number.parseInt(text.trim());
+
+            if (!currentNextId || currentNextId < 1) {
+                throw new Error(`Cannot apply add event ${event.id}: next image ID is "${text.trim()}"`);
+            }
+
+            const nextId = Math.max(currentNextId, event.id + 1);
+            await Deno.writeTextFile(nextIdPath, String(nextId), { create: false });
+        }
 
         // TODO: durability; If this fails after writing image_state.json but before writing tag_index.json,
         // then state and tag index are made inconsistent
@@ -238,7 +254,6 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         await writeJsonFile(indexPath, tagIndex);
 
         // Write cursor last only after the derived indexes are durable.
-        const cursorPath = join(this.conn.path, 'event_cursor');
         await writeJsonFile(cursorPath, nextCursor);
         this.cursorCache = nextCursor;
     }
