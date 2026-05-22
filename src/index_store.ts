@@ -35,6 +35,20 @@ export interface DerivedIndexStore {
      */
     isInitialized(): Promise<boolean>;
 
+    /**
+     * Create an empty derived index from which event replay can start.
+     *
+     * This should create/reset derived index artifacts, initialize the write-path
+     * image ID sequence, remove any persisted replay cursor, and clear in-memory
+     * cursor state.
+     *
+     * Call this only when `isInitialized()` returns `false`, before replaying
+     * committed events.
+     *
+     * @returns Resolves after the empty index artifacts are written.
+     */
+    initializeEmptyIndex(): Promise<void>;
+
     getImage(id: string): Promise<ImageState | null>;
     getIdByOid(oid: string): Promise<string | null>;
 
@@ -119,14 +133,16 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         ];
 
         using _lock = await this.nextIdMutex.acquire();
-        await Deno.readTextFile(nextImageIdIndex)
+        const valid = await Deno.readTextFile(nextImageIdIndex)
             .then((t) => {
                 const id = Number(t.trim());
-                if (!Number.isSafeInteger(id) || id < 1) return false;
+                if (Number.isSafeInteger(id && id >= 1)) return true;
+                return false;
             })
             .catch(() => {
                 return false;
             });
+        if (!valid) return valid;
 
         return await Promise.all(paths.map((p) => Deno.stat(p)))
             .then((stats) => stats.every((s) => s.isFile))
@@ -134,6 +150,34 @@ export class JsonFileIndexStore implements DerivedIndexStore {
                 if (error instanceof Deno.errors.NotFound) return false;
                 throw error;
             });
+    }
+
+    // TODO:
+    // make idempotent, rename to initializeIndex() ?
+    // if (await this.isInitialized()) {
+    //     throw new Error('already init');
+    // }
+    //
+    async initializeEmptyIndex(): Promise<void> {
+        using _lock = await this.mu.acquire();
+        using _idLock = await this.nextIdMutex.acquire();
+
+        const indexDir = join(this.conn.path, 'index');
+
+        await Deno.mkdir(indexDir, { recursive: true });
+
+        await writeJsonFile(join(indexDir, 'image_state.json'), {});
+        await writeJsonFile(join(indexDir, 'tag_index.json'), {});
+
+        await Deno.writeTextFile(join(indexDir, 'next_image_id'), '1', {
+            create: true,
+        });
+
+        await Deno.remove(join(this.conn.path, 'event_cursor')).catch((error) => {
+            if (!(error instanceof Deno.errors.NotFound)) throw error;
+        });
+
+        this.cursorCache = null;
     }
 
     async getImage(id: string): Promise<ImageState | null> {
