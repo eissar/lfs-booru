@@ -87,17 +87,13 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     // local mutex
     private readonly mu = new Mutex();
     private readonly nextIdMutex = new Mutex();
+
     conn: LibraryConnection;
     constructor(conn: LibraryConnection) {
+        // replace by this.dir
         this.conn = conn;
-
-        // synchronously read next_image_id
-        // on failure, throw error,
-        // TODO: attempt to re-index on err
-        this.nextImageId = Number(Deno.readTextFileSync(join(this.conn.path, 'index', 'next_image_id')).trim());
     }
 
-    nextImageId: number = 1;
     cursorCache: IndexCursor | null = null;
 
     getCursor(): IndexCursor | null {
@@ -115,11 +111,22 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async isInitialized(): Promise<boolean> {
+        const nextImageIdIndex = join(this.conn.path, 'index', 'next_image_id');
         const paths = [
             join(this.conn.path, 'index', 'image_state.json'),
             join(this.conn.path, 'index', 'tag_index.json'),
-            join(this.conn.path, 'index', 'next_image_id'),
+            nextImageIdIndex,
         ];
+
+        using _lock = await this.nextIdMutex.acquire();
+        await Deno.readTextFile(nextImageIdIndex)
+            .then((t) => {
+                const id = Number(t.trim());
+                if (!Number.isSafeInteger(id) || id < 1) return false;
+            })
+            .catch(() => {
+                return false;
+            });
 
         return await Promise.all(paths.map((p) => Deno.stat(p)))
             .then((stats) => stats.every((s) => s.isFile))
@@ -251,11 +258,16 @@ export class JsonFileIndexStore implements DerivedIndexStore {
      */
     async allocateImageId(): Promise<number> {
         using _lock = await this.nextIdMutex.acquire();
-        const id = this.nextImageId;
-        this.nextImageId = id + 1;
-        await Deno.writeTextFile(join(this.conn.path, 'index', 'next_image_id'), String(this.nextImageId), {
-            create: false,
-        });
+
+        const path = join(this.conn.path, 'index', 'next_image_id');
+        const text = await Deno.readTextFile(path);
+        const id = Number(text.trim());
+
+        if (!Number.isSafeInteger(id) || id < 1) {
+            throw new Error(`Cannot allocate image ID: next image ID is "${text.trim()}"`);
+        }
+
+        await Deno.writeTextFile(path, String(id + 1), { create: false });
         return id;
     }
 
