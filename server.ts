@@ -170,12 +170,13 @@ async function Start(port: number = 8000) {
 
     // TODO:
     // if (indexFlag) console.log('Attempting re-index from last checkpoint')
-
     if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
-
     debug(`indexFlag=${indexFlag} IndexStoreBackend=${store.constructor.name}`);
-    if (indexFlag) await processEvents(store, eventLog);
-    // if (indexFlag) await processEvents(lib, store);
+
+    if (!(await store.isInitialized())) {
+        await store.initializeEmptyIndex();
+        await processEvents(store, eventLog);
+    }
 
     Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render));
 }

@@ -4,9 +4,9 @@ import { panic } from '@/util.ts';
 import { LibraryConnection } from '@/library.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
-import { AddEvent } from '@/handlers.ts';
+import { type AddEvent } from '@/indexer.ts';
 import { writePointerFile } from './pointer.ts';
-import { NdjsonEventLog, type EventAppendResult } from '@/event_log.ts';
+import { type EventAppendResult, NdjsonEventLog } from '@/event_log.ts';
 
 for (const type of ['unhandledrejection', 'error']) {
     globalThis.addEventListener(type, (e) => {
@@ -201,9 +201,7 @@ if (import.meta.main) {
             mtime: (stat.mtime ?? new Date()).toISOString(),
         };
 
-        const [ingestError, ingestMs] = await timed(() =>
-            internalIngest(bytes, conn, lib, eventLog, event)
-        );
+        const [ingestError, ingestMs] = await timed(() => internalIngest(bytes, conn, lib, eventLog, event));
 
         if (ingestError) {
             console.error(ingestError);
