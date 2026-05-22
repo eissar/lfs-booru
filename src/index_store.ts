@@ -136,7 +136,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const valid = await Deno.readTextFile(nextImageIdIndex)
             .then((t) => {
                 const id = Number(t.trim());
-                if (Number.isSafeInteger(id && id >= 1)) return true;
+                if (Number.isSafeInteger(id) && id >= 1) return true;
                 return false;
             })
             .catch(() => {
