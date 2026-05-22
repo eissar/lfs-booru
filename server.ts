@@ -14,15 +14,7 @@ import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
 import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
 import { c } from '@/util.ts';
-
-const LFS_SERVER = 'http://localhost:8080';
-
-const conn: LfsConn = {
-    url: LFS_SERVER,
-    auth: `Basic ${btoa('user:pass')}`,
-    user: 'USER',
-    repo: 'REPO',
-};
+import { getFlags } from '@/cli.ts';
 
 function createHandler(
     store: DerivedIndexStore,
@@ -155,10 +147,17 @@ function createHandler(
 // blocking
 async function Start(port: number = 8000) {
     // todo: process flags
+    const cfg = getFlags();
 
-    const lib: LibConn = {
-        path: '/home/eissar/code/lfs-booru/libraries/new/',
+    const conn: LfsConn = {
+        url: cfg.lfsserver,
+        auth: cfg.lfsauth,
+        user: 'USER',
+        repo: 'REPO',
     };
+
+    const lib: LibConn = { path: cfg.lib };
+
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
@@ -167,7 +166,7 @@ async function Start(port: number = 8000) {
 
     // todo: end process flags
 
-    debug(`library=${lib.path} LFS_SERVER=${LFS_SERVER}`);
+    debug(`library=${lib.path} LFS_SERVER=${cfg.lfsserver}`);
 
     // TODO:
     // if (indexFlag) console.log('Attempting re-index from last checkpoint')
