@@ -12,13 +12,14 @@ await load({ envPath: '.env', export: true });
 const HOME = Deno.env.get('HOME') || Deno.env.get('USERPROFILE');
 
 // load xdg dirs
+// https://wiki.archlinux.org/title/XDG_user_directories
 //
 // $XDG_CONFIG_HOME  $HOME/.config.
 // $XDG_DATA_HOME    $HOME/.local/share.
 // $XDG_STATE_HOME   $HOME/.local/state.
 // $XDG_CACHE_HOME   $HOME/.cache.
 const XDG_CONFIG_HOME = Deno.env.get('XDG_CONFIG_HOME') || `${HOME}/.config`;
-await load({ envPath: XDG_CONFIG_HOME, export: true });
+await load({ envPath: resolve(XDG_CONFIG_HOME, 'user-dirs.dirs'), export: true });
 
 const DOCS = Deno.env.get('XDG_DOCUMENTS_DIR') || `${HOME}/Documents`;
 const DEFAULT_BOORU_LIBRARY_PATH = `${DOCS}/Libraries/Default`;
