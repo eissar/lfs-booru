@@ -1,5 +1,5 @@
-import { parseArgs } from '@std/cli/parse-args';
 import { load } from '@std/dotenv';
+import { parseArgs } from '@std/cli/parse-args';
 import { resolve } from '@std/path';
 import { panic } from './util.ts';
 
@@ -14,12 +14,16 @@ const HOME = Deno.env.get('HOME') || Deno.env.get('USERPROFILE');
 // load xdg dirs
 // https://wiki.archlinux.org/title/XDG_user_directories
 //
+// we won't be able to do this by parsing
+// the file since we would need to implement
+// sourcing / expanding any env var somehow
+//
 // $XDG_CONFIG_HOME  $HOME/.config.
 // $XDG_DATA_HOME    $HOME/.local/share.
 // $XDG_STATE_HOME   $HOME/.local/state.
 // $XDG_CACHE_HOME   $HOME/.cache.
-const XDG_CONFIG_HOME = Deno.env.get('XDG_CONFIG_HOME') || `${HOME}/.config`;
-await load({ envPath: resolve(XDG_CONFIG_HOME, 'user-dirs.dirs'), export: true });
+// const XDG_CONFIG_HOME = Deno.env.get('XDG_CONFIG_HOME') || `${HOME}/.config`;
+// await load({ envPath: resolve(XDG_CONFIG_HOME, 'user-dirs.dirs'), export: true });
 
 const DOCS = Deno.env.get('XDG_DOCUMENTS_DIR') || `${HOME}/Documents`;
 const DEFAULT_BOORU_LIBRARY_PATH = `${DOCS}/Libraries/Default`;
