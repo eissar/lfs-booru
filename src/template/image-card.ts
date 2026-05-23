@@ -8,6 +8,28 @@ export default function imageCard(image: GalleryImage, tags: string): string {
     const imageName = escape(image.name);
 
     return html`
+        <!-- TODO: add data-tags -->
+        <article class="masonry-item group" data-image-id="${escape(image.id)}">
+            <div class="relative overflow-hidden flex flex-col rounded-lg hover-card">
+                <div class="block p-4 w-full peer order-2">
+                    <a href="${imageSrc}">
+                        <span class="font-medium truncate">${imageName}</span>
+                    </a>
+                </div>
+
+                <!-- TODO: add alt -->
+                <img
+                    src="${imageSrc}"
+                    loading="lazy"
+                    width="${image.width}"
+                    height="${image.height}"
+                    class="transition-transform duration-300 peer-hover:scale-105 order-1"
+                />
+            </div>
+        </article>
+    `;
+
+    return html`
         <div>
             <p><strong>${imageName}</strong></p>
             <div>Tags: ${tags}</div>

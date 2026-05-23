@@ -1,10 +1,10 @@
-import { basename, join } from '@std/path';
+import { basename, fromFileUrl, join } from '@std/path';
 import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
 import { panic } from '@/util.ts';
 import { LibraryConnection } from '@/library.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
-import { type AddEvent } from '@/indexer.ts';
+import { AddEvent } from '@/indexer.ts';
 import { writePointerFile } from './pointer.ts';
 import { type EventAppendResult, NdjsonEventLog } from '@/event_log.ts';
 
@@ -27,7 +27,7 @@ const conn: LfsConn = {
 };
 
 const lib: LibraryConnection = {
-    path: '/home/eissar/code/lfs-booru/libraries/new/',
+    path: fromFileUrl(new URL('../libraries/new/', import.meta.url)),
 };
 const eventLog = new NdjsonEventLog(lib.path);
 

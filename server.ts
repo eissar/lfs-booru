@@ -1,5 +1,5 @@
 import { serveDir } from '@std/http/file-server';
-import { join } from '@std/path';
+import { fromFileUrl, join } from '@std/path';
 
 import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
 
@@ -13,8 +13,17 @@ import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
 import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
-import { c } from '@/util.ts';
-import { getFlags } from '@/cli.ts';
+import { c, panic } from '@/util.ts';
+import { cli } from '@/cli.ts';
+
+const LFS_SERVER = 'http://localhost:8080';
+
+const conn: LfsConn = {
+    url: LFS_SERVER,
+    auth: `Basic ${btoa('user:pass')}`,
+    user: 'USER',
+    repo: 'REPO',
+};
 
 function createHandler(
     store: DerivedIndexStore,
@@ -62,6 +71,21 @@ function createHandler(
             const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
 
             return c.html(await render.renderGalleryPage({ title: 'Gallery', cards: cards }));
+        }
+        // REGION: /f/ -> fragments
+        if (url.pathname.startsWith('/f/items')) {
+            const limitP = url.searchParams.get('limit');
+            const limit = parseInt(limitP ?? '10');
+
+            const imageList = store.listImages({ limit });
+
+            const images: GalleryImage[] = [];
+            for await (const [id, img] of imageList) {
+                if (img.oid) images.push({ id, ...img });
+            }
+            const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
+
+            return c.html(cards.join('\n'));
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
@@ -145,19 +169,13 @@ function createHandler(
 }
 
 // blocking
-async function Start(port: number = 8000) {
-    // todo: process flags
-    const cfg = getFlags();
+export async function Start(port: number = 8000) {
+    const home = Deno.env.get('HOME');
+    if (!home) panic('HOME is not set');
 
-    const conn: LfsConn = {
-        url: cfg.lfsserver,
-        auth: cfg.lfsauth,
-        user: 'USER',
-        repo: 'REPO',
+    const lib: LibConn = {
+        path: fromFileUrl(new URL('./libraries/new/', import.meta.url)),
     };
-
-    const lib: LibConn = { path: cfg.lib };
-
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
@@ -166,21 +184,21 @@ async function Start(port: number = 8000) {
 
     // todo: end process flags
 
-    debug(`library=${lib.path} LFS_SERVER=${cfg.lfsserver}`);
+    debug(`library=${lib.path} LFS_SERVER=${LFS_SERVER}`);
 
     // TODO:
     // if (indexFlag) console.log('Attempting re-index from last checkpoint')
+
     if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
+
     debug(`indexFlag=${indexFlag} IndexStoreBackend=${store.constructor.name}`);
+    if (indexFlag) await processEvents(store, eventLog);
+    // if (indexFlag) await processEvents(lib, store);
 
-    if (!(await store.isInitialized())) {
-        await store.initializeEmptyIndex();
-        await processEvents(store, eventLog);
-    }
-
-    Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render));
+    const s = Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render));
+    await s.finished;
 }
 
 if (import.meta.main) {
-    Start();
+    cli(Deno.args);
 }
