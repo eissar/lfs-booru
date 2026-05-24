@@ -1,6 +1,6 @@
 import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
-import { escape } from '@std/html/entities';
+// import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
 import { template } from '@/template/index.ts';
 
@@ -31,7 +31,10 @@ export interface HtmlRenderer {
      * @returns Rendered gallery page HTML.
      */
     renderGalleryPage(input: {
+        /** Page title. */
         title: string;
+        /** Query string forwarded to the initial item fragment request. */
+        itemSearch: string;
     }): Promise<string>;
 
     renderPhotoGrid(input: { cards: string }): Promise<string>;
@@ -103,12 +106,16 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @returns Rendered gallery page HTML.
      */
     async renderGalleryPage(input: {
+        /** Page title. */
         title: string;
+        /** Query string forwarded to the initial item fragment request. */
+        itemSearch: string;
     }): Promise<string> {
         const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
             version: this.version,
             title: input.title,
+            itemSearch: input.itemSearch,
         }));
         const cacheDir = join(this.artifactsPath, 'gallery-pages');
         const cachePath = join(cacheDir, `${cacheKey}.html`);
@@ -119,7 +126,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = template.page.Gallery(input.title, this.version);
+        const html = template.page.Gallery(input.title, this.version, input.itemSearch);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);

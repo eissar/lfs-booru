@@ -6,14 +6,17 @@ import { html } from '@/html.ts';
  *
  * @param title - The page title.
  * @param version - The renderer/template version.
+ * @param itemSearch - Query string forwarded to the initial item fragment request.
  * @returns {string} HTML string
  */
 export default function gallery(
     title: string,
     version: string,
+    itemSearch: string,
 ): string {
     const escapedTitle = escape(title);
     const escapedVersion = escape(version);
+    const escapedInitialItemsUrl = escape(`/fragment/items${itemSearch}`);
 
     return html`
         <!DOCTYPE html>
@@ -191,7 +194,7 @@ export default function gallery(
                     <div class="layout">
                         <section class="main-content">
                             <div id="photo-grid" class="masonry-grid">
-                                <div hx-get="/fragment/items" hx-trigger="load" hx-target=".main-content" hx-swap="outerHTML">
+                                <div hx-get="${escapedInitialItemsUrl}" hx-trigger="load" hx-target=".main-content" hx-swap="outerHTML">
                                     Loading initial content...
                                 </div>
                             </div>
