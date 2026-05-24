@@ -141,6 +141,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         return html;
     }
 
+    /** {@inheritDoc HtmlRenderer.renderPhotoGrid} */
     async renderPhotoGrid(input: { cards: string }): Promise<string> {
         return await Promise.resolve(template.fragment.photoGrid(input.cards));
     }

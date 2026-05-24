@@ -1,8 +1,8 @@
 export const LFS_MEDIA_TYPE = 'application/vnd.git-lfs+json';
+
 export const LFS_CONTENT_MEDIA_TYPE = 'application/vnd.git-lfs';
 
 export type LfsConnection = {
-    /** url to the lfs server */
     url: string;
     auth: string;
     user: string;
@@ -74,6 +74,15 @@ function objectsUrl(conn: LfsConnection): URL {
 function objectUrl(conn: LfsConnection, oid: string): URL {
     return new URL(`${objectsUrl(conn).pathname}/${encodeURIComponent(oid)}`, conn.url);
 }
+/**
+ * Register object metadata with the LFS server (POST batch).
+ *
+ * @param conn LFS server connection.
+ * @param oid SHA-256 hex digest of the object.
+ * @param size Object size in bytes.
+ * @param h Optional additional request headers.
+ * @returns The LFS server response.
+ */
 export async function PutObjectMeta(conn: LfsConnection, oid: string, size: number, h?: HeadersInit) {
     const url = objectsUrl(conn);
 
@@ -89,9 +98,17 @@ export async function PutObjectMeta(conn: LfsConnection, oid: string, size: numb
     });
 }
 
-// - PUT
-//     - Upload/store raw object bytes for that OID
-//     - Returns 200 on success, 404 if metadata for OID not found, 500 on store failure
+/**
+ * Upload raw object bytes to the LFS server (PUT).
+ *
+ * Object metadata must already be registered via {@link PutObjectMeta}.
+ *
+ * @param conn LFS server connection.
+ * @param oid SHA-256 hex digest of the object.
+ * @param body Object content.
+ * @param h Optional additional request headers.
+ * @returns The LFS server response (200 on success, 404 if metadata not found).
+ */
 export async function PutObjectContent(conn: LfsConnection, oid: string, body: BodyInit, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
@@ -108,13 +125,14 @@ export async function PutObjectContent(conn: LfsConnection, oid: string, body: B
     });
 }
 
-// TODO: validate this is true
-// we can accept a user/repo, but they are *ignored*
-// it isn't validated when requesting metadata,
-// its' a simple lookup by the ID
-
-// - GET
-//     - Accept: application/vnd.git-lfs+json → return JSON metadata (Representation) with hypermedia links
+/**
+ * Retrieve object metadata from the LFS server (GET JSON).
+ *
+ * @param conn LFS server connection.
+ * @param oid SHA-256 hex digest of the object.
+ * @param h Optional additional request headers.
+ * @returns The LFS server response with hypermedia links.
+ */
 export async function GetObjectMeta(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
@@ -128,8 +146,16 @@ export async function GetObjectMeta(conn: LfsConnection, oid: string, h?: Header
         // signal,
     });
 }
-// - GET
-//     - Accept: application/octet-stream → download raw object bytes (supports Range, can return 206)
+/**
+ * Download raw object bytes from the LFS server (GET binary).
+ *
+ * Supports `Range` headers for resumable downloads.
+ *
+ * @param conn LFS server connection.
+ * @param oid SHA-256 hex digest of the object.
+ * @param h Optional additional request headers.
+ * @returns The LFS server response with the object body.
+ */
 export async function GetObjectContent(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 
@@ -144,9 +170,14 @@ export async function GetObjectContent(conn: LfsConnection, oid: string, h?: Hea
     });
 }
 
-// returns
-// {"oid":"b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","size":3574,"actions":{"download":{"href":"http://localhost:8080/objects/b8bb6fd3a1de6dfdb848bca774c3657c61986e47b6130d1f017808dbf05be77a","header":{"Accept":"application/vnd.git-lfs"},"expires_at":"0001-01-01T00:00:00Z"}}}
-// useful for existence/range checks
+/**
+ * Check object existence and metadata via HEAD.
+ *
+ * @param conn LFS server connection.
+ * @param oid SHA-256 hex digest of the object.
+ * @param h Optional additional request headers.
+ * @returns The LFS server response (status and headers only, no body).
+ */
 export async function HeadObjectMeta(conn: LfsConnection, oid: string, h?: HeadersInit) {
     const url = objectUrl(conn, oid);
 

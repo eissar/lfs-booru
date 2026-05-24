@@ -1,3 +1,10 @@
+/**
+ * Print an error message to stderr and terminate the process.
+ *
+ * @param message Human-readable panic description.
+ * @param code Process exit code (defaults to 1).
+ * @returns Never returns; the process exits.
+ */
 export function panic(message: string, code = 1): never {
     console.error(`Panic: ${message}`);
     Deno.exit(code);
@@ -5,10 +12,7 @@ export function panic(message: string, code = 1): never {
 
 export const isInt = Number.isSafeInteger as (v: unknown) => v is number;
 
-/**
- * Utility functions for creating HTTP response objects
- * @namespace
- */
+/** Utility functions for creating HTTP response objects. */
 export const c = {
     json: (data: Parameters<JSON['stringify']>[0], status: number = 200): Response =>
         new Response(

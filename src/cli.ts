@@ -28,6 +28,13 @@ const HOME = Deno.env.get('HOME') || Deno.env.get('USERPROFILE');
 const DOCS = Deno.env.get('XDG_DOCUMENTS_DIR') || `${HOME}/Documents`;
 const DEFAULT_BOORU_LIBRARY_PATH = `${DOCS}/Libraries/Default`;
 
+/**
+ * Read an environment variable or throw if it is unset or empty.
+ *
+ * @param name Environment variable name.
+ * @returns The environment variable value.
+ * @throws Error when the variable is missing or empty.
+ */
 export function mustGetEnv(name: string): string {
     const v = Deno.env.get(name);
     if (!v) throw new Error(`Missing env var: ${name}`);

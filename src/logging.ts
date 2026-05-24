@@ -42,6 +42,14 @@ type DebugInput =
     | (() => any)
     | (() => Promise<any>);
 
+/**
+ * Log a debug value to the console and the application log file.
+ *
+ * Accepts a plain value, a synchronous thunk, or an async thunk. Thunks are
+ * resolved before inspection. When `DEBUG` is `false`, the call is a no-op.
+ *
+ * @param input Value or thunk to inspect and log.
+ */
 export const debug = (input: DebugInput): void => {
     if (!DEBUG) return;
 

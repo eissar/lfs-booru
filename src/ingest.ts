@@ -5,6 +5,24 @@ import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
 import { join } from '@std/path';
 
+/**
+ * Ingest an image file into the library.
+ *
+ * Computes the SHA-256 OID, pushes the object to the LFS server, writes a
+ * Git LFS pointer file, and returns the resulting add event. The caller is
+ * responsible for appending the event to the event log and committing.
+ *
+ * @param lib Library connection descriptor.
+ * @param conn LFS server connection.
+ * @param store Derived index store (used to allocate the image ID).
+ * @param file Image file to ingest.
+ * @param tags Tags to associate with the image.
+ * @param name Optional display name (defaults to `Image {id}`).
+ * @param height Optional image height in pixels.
+ * @param width Optional image width in pixels.
+ * @param mtime Optional modification time as an ISO-8601 string.
+ * @returns The constructed add event.
+ */
 export async function ingest(
     lib: LibConn,
     conn: LfsConn,
@@ -78,8 +96,18 @@ export async function ingest(
     return event;
 }
 
-// parseFormData
-// -> ingest()
+/**
+ * Parse a multipart form-data request and ingest the contained image.
+ *
+ * Expects form fields `image` (file), `tags` (JSON string array), and
+ * optionally `name`.
+ *
+ * @param lib Library connection descriptor.
+ * @param conn LFS server connection.
+ * @param req Incoming HTTP request with multipart form data.
+ * @param store Derived index store (used to allocate the image ID).
+ * @returns The constructed add event.
+ */
 export async function ingestFile(
     lib: LibConn,
     conn: LfsConn,

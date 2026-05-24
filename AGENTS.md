@@ -21,7 +21,7 @@ testing is on hold for now.
 
 ## Documentation Requirements
 
-All public symbols must have JSDoc with:
+All public functions must have JSDoc with:
 - Short description
 - `@typeParam` for each type parameter
 - `@param` for each parameter

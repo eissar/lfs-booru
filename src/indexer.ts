@@ -52,6 +52,7 @@ export type DeleteEvent = {
 export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent;
 
 export type TagIndex = Record<string, string[]>;
+
 export type ImageStateIndex = Record<string, ImageState>;
 
 export type IndexResult = {
@@ -61,8 +62,16 @@ export type IndexResult = {
     events: number;
 };
 
-// we process events from the
-// sharded events log at eventsDir
+/**
+ * Replay unprocessed events from the event log into the derived index store.
+ *
+ * Reads events from the event log starting at the store's current cursor and
+ * applies each event to the store, advancing the cursor.
+ *
+ * @param store Derived index store to apply events to.
+ * @param eventLog Source event log to read events from.
+ * @returns Aggregate counts of indexed images, tags, and processed events.
+ */
 export async function processEvents(
     store: DerivedIndexStore,
     eventLog: EventLog,

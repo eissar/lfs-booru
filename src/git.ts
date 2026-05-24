@@ -68,6 +68,12 @@ export async function Init(repoPath: string): Promise<null | Error> {
 }
 
 /**
+ * Stage the given paths and create a commit in the library repository.
+ *
+ * @param paths File paths to stage, relative to or absolute within the library.
+ * @param message Commit message.
+ * @param lib Library connection descriptor.
+ * @returns Resolves after the commit is created.
  * @throws GitConstructError, GitError, GitPluginError, GitResponseError, TaskConfigurationError
  * bubbling from any error from add / commit
  */

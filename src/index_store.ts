@@ -18,7 +18,6 @@ export type ItemsFilter = {
 //
 // this should be stored in memory & written to disk
 //
-/** @property {byteOffset} asdf */
 export type IndexCursor = {
     eventFile: string;
     byteOffset: number;
@@ -26,6 +25,7 @@ export type IndexCursor = {
 
 export interface DerivedIndexStore {
     getCursor(): IndexCursor | null;
+
     saveCursor(c: IndexCursor): Promise<void>;
 
     /**
@@ -58,6 +58,7 @@ export interface DerivedIndexStore {
     initializeEmptyIndex(): Promise<void>;
 
     getImage(id: string): Promise<ImageState | null>;
+
     getIdByOid(oid: string): Promise<string | null>;
 
     /** apply and write event_cursor */
@@ -104,7 +105,6 @@ export interface DerivedIndexStore {
     close(): Promise<void> | void;
 }
 
-// we store mutexes per instance which is fine for now
 export class JsonFileIndexStore implements DerivedIndexStore {
     // local mutex
     private readonly mu = new Mutex();
@@ -135,12 +135,6 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         }
     }
 
-    /**
-     * Persist the replay cursor and update the in-memory cursor cache.
-     *
-     * @param c Cursor position to persist.
-     * @returns Resolves after the cursor is written.
-     */
     async saveCursor(c: IndexCursor): Promise<void> {
         using _lock = await this.mu.acquire();
         const cursorPath = join(this.conn.path, 'event_cursor');
@@ -383,6 +377,13 @@ async function writeJsonFile(path: string, value: unknown): Promise<void> {
 
 // const eventsDir = 'events';
 
+/**
+ * Add an image ID to a tag's entry in the tag index, creating the entry if needed.
+ *
+ * @param tagIndex Mutable tag index to update.
+ * @param tag Tag string.
+ * @param id Image ID to associate with the tag.
+ */
 export function addToTag(tagIndex: TagIndex, tag: string, id: string): void {
     tagIndex[tag] ??= [];
     if (!tagIndex[tag].includes(id)) tagIndex[tag].push(id);
