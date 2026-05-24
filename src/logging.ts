@@ -2,6 +2,31 @@
 
 const DEBUG = true;
 
+const originalLog = console.log;
+
+const filePath = 'app.log';
+
+const encoder = new TextEncoder();
+
+// truncate to nil
+Deno.writeFileSync(filePath, encoder.encode(''));
+
+const file = await Deno.open(filePath, {
+    write: true,
+    create: true,
+    append: true,
+});
+
+// Override console.log
+console.log = (...args: unknown[]) => {
+    const message = args.map((arg) => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+
+    file.writeSync(encoder.encode(message + '\n'));
+    originalLog(...args);
+};
+
+// --- Test it out ---
+
 // Side effect, w/e
 // Extend the global Error prototype with Deno's custom inspect symbol
 Object.defineProperty(Error.prototype, Symbol.for('Deno.customInspect'), {
