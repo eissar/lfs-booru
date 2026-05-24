@@ -180,8 +180,13 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         using _lock = await this.mu.acquire();
         using _idLock = await this.nextIdMutex.acquire();
 
-        const indexDir = join(this.conn.path, 'index');
+        // Ensure the library subdirectory structure exists.
+        // we shouldn't need to do this since the template exists
+        // but it's fine
+        await Deno.mkdir(join(this.conn.path, 'images'), { recursive: true });
+        await Deno.mkdir(join(this.conn.path, 'events'), { recursive: true });
 
+        const indexDir = join(this.conn.path, 'index');
         await Deno.mkdir(indexDir, { recursive: true });
 
         await writeJsonFile(join(indexDir, 'image_state.json'), {});
