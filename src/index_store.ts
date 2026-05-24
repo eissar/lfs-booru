@@ -257,7 +257,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         this.cursorCache = nextCursor;
     }
 
-    async *listImages(options: { limit?: number } = {}): AsyncIterable<[string, ImageState]> {
+    async *listImages(options: { limit?: number; tags?: string[] } = {}): AsyncIterable<[string, ImageState]> {
         let entries: [string, ImageState][];
 
         {
@@ -265,6 +265,12 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             const statePath = join(this.conn.path, 'index', 'image_state.json');
             const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
             entries = Object.entries(imageState);
+        }
+
+        if (options.tags && options.tags.length > 0) {
+            entries = entries.filter(([_id, imageState]) => {
+                return options.tags!.some((t) => imageState.tags.includes(t));
+            });
         }
 
         const limit = options.limit ?? Infinity;
