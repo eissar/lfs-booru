@@ -13,11 +13,35 @@ import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
-import { c } from '@/util.ts';
+import { c, isInt } from '@/util.ts';
 
-async function handleUiRoutes(url: URL, render: HtmlRenderer): Promise<void | Response> {
+async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRenderer): Promise<void | Response> {
     if (url.pathname === '/gallery') {
         return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
+    }
+
+    if (url.pathname === '/fragment/items') {
+        const MIN_LIMIT = 10;
+        let limit = Number(url.searchParams.get('limit'));
+        if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
+
+        const tags = url.searchParams.getAll('tags')
+            .flatMap((value) => value.split(','))
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
+
+        const imageList = store.listItems({
+            limit,
+            tags,
+        });
+
+        const images = [];
+        for await (const [id, img] of imageList) {
+            if (img.oid) images.push({ id, ...img });
+        }
+        const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
+
+        return c.html(await render.renderPhotoGrid({ cards: cards.join('') }));
     }
 }
 
@@ -123,7 +147,7 @@ function createHandler(
         }
 
         {
-            const uiResponse = await handleUiRoutes(url, render);
+            const uiResponse = await handleUiRoutes(url, store, render);
             if (uiResponse) return uiResponse;
         }
 

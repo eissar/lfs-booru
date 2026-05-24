@@ -33,6 +33,8 @@ export interface HtmlRenderer {
     renderGalleryPage(input: {
         title: string;
     }): Promise<string>;
+
+    renderPhotoGrid(input: { cards: string }): Promise<string>;
 }
 
 /**
@@ -130,6 +132,10 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
 
         return html;
+    }
+
+    async renderPhotoGrid(input: { cards: string }): Promise<string> {
+        return await Promise.resolve(template.fragment.photoGrid(input.cards));
     }
 }
 
