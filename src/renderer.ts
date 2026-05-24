@@ -2,7 +2,7 @@ import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
 import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
-import { templates } from '@/template/index.ts';
+import { template } from '@/template/index.ts';
 
 /**
  * Image state with the derived index identifier attached.
@@ -88,7 +88,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         const tags: string = image.tags.map(renderTagTemplate).join('\n');
 
         // wrap in promise to satisfy signature
-        return await Promise.resolve(templates.ImageCard(image, tags));
+        return await Promise.resolve(template.fragment.ImageCard(image, tags));
     }
 
     /**
@@ -120,7 +120,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = templates.Gallery(input.title, input.cards, this.version);
+        const html = template.page.Gallery(input.title, input.cards, this.version);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
