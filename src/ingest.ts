@@ -3,7 +3,7 @@ import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs
 import { AddEvent } from './indexer.ts';
 import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
-import { join } from '@std/path';
+import { dirname, join } from '@std/path';
 
 /**
  * Ingest an image file into the library.
@@ -87,6 +87,8 @@ export async function ingest(
     });
 
     const pointerPath = join(lib.path, event.path);
+
+    await Deno.mkdir(dirname(pointerPath), { recursive: true });
 
     await writePointerFile(event.oid, size, pointerPath)
         .catch(() => {
