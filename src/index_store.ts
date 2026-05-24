@@ -74,7 +74,7 @@ export interface DerivedIndexStore {
      */
     allocateImageId(): Promise<number>;
 
-    listImages(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
+    listItems(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
 
     listImagesByIds(ids: string[], options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
 
@@ -257,7 +257,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         this.cursorCache = nextCursor;
     }
 
-    async *listImages(options: { limit?: number; tags?: string[] } = {}): AsyncIterable<[string, ImageState]> {
+    async *listItems(options: { limit?: number; tags?: string[] } = {}): AsyncIterable<[string, ImageState]> {
         let entries: [string, ImageState][];
 
         {
