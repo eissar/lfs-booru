@@ -4,6 +4,13 @@ import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 import { isInt } from '@/util.ts';
 
+export type ItemsFilter = {
+    limit: number;
+    tags?: string[];
+    // TODO:
+    // keyword?: string
+};
+
 // TODO:
 // guard to detect file rotation (size < offset, or file switched)
 // ensure: atomic operations
@@ -74,7 +81,7 @@ export interface DerivedIndexStore {
      */
     allocateImageId(): Promise<number>;
 
-    listItems(options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
+    listItems(options: ItemsFilter): AsyncIterable<[string, ImageState]>;
 
     listImagesByIds(ids: string[], options?: { limit?: number }): AsyncIterable<[string, ImageState]>;
 
@@ -257,7 +264,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         this.cursorCache = nextCursor;
     }
 
-    async *listItems(options: { limit?: number; tags?: string[] } = {}): AsyncIterable<[string, ImageState]> {
+    async *listItems(options: ItemsFilter): AsyncIterable<[string, ImageState]> {
         let entries: [string, ImageState][];
 
         {
