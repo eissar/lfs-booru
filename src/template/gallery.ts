@@ -61,7 +61,6 @@ export default function gallery(
                 </script>
             </head>
             <body data-renderer-version="${escapedVersion}" class="antialiased">
-                <!-- {{template "header" .}} -->
                 <header
                     id="toolbar"
                     class="sticky top-0 z-20 backdrop-blur-lg shadow-sm"
@@ -71,7 +70,6 @@ export default function gallery(
                         <div class="flex items-center justify-between h-16">
                             <div class="flex items-center gap-4 text-sm flex-1 min-w-0 justify-end">
                                 <div class="relative w-full max-w-xs flex-shrink-0">
-                                    <!-- Search Icon -->
                                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <svg
                                             width="16"
@@ -95,7 +93,7 @@ export default function gallery(
                                         type="search"
                                         name="keyword"
                                         placeholder="keyword search"
-                                        hx-get="/items"
+                                        hx-get="/fragment/items"
                                         hx-trigger="keyup changed delay:500ms"
                                         hx-target="#photo-grid"
                                         hx-swap="outerHTML"
@@ -103,7 +101,6 @@ export default function gallery(
                                         class="block w-full border border-transparent rounded-lg py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-transparent input-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 focus-visible:border-transparent"
                                     />
                                 </div>
-                                <!-- dark-mode-toggle -->
                                 <div class="relative inline-block">
                                     <button
                                         id="dark-mode-toggle"
@@ -122,7 +119,6 @@ export default function gallery(
                                     </button>
                                 </div>
                             </div>
-                            <!-- upload-button -->
                             <div class="relative inline-block">
                                 <details class="relative" name="header">
                                     <summary
@@ -141,9 +137,6 @@ export default function gallery(
                                         class="absolute right-0 mt-2 w-96 rounded shadow-lg z-10 overflow-auto dropdown-container max-h-80"
                                         style="-ms-overflow-style:none; scrollbar-width:none; background-color: var(--bg-surface);"
                                     >
-                                        <!-- "TODO: inline indicator hx-submit--> yellow/pending -> after-request if
-                                        (event.detail.successful) -> green/success" -->
-                                        <!-- "hx-on::after-request="if(event.detail.successful) { this.reset(); document.getElementById('photo-grid').innerHTML = 'Loading...'; htmx.ajax('GET', '/f/items', {target: '#photo-grid', swap: 'innerHTML'});" }" -->
                                         <form
                                             id="upload-form"
                                             hx-post="/ingest"
@@ -189,12 +182,10 @@ export default function gallery(
                     </div>
                 </header>
                 <main class="max-w-screen-2xl mx-auto p-5 sm:p-6 lg:p-8">
-                    <!-- main -> hx-on:dragenter="document.querySelector('details[name=header]').open = true" -->
-
                     <div class="layout">
                         <section class="main-content">
                             <div id="photo-grid" class="masonry-grid">
-                                <div hx-get="${escapedInitialItemsUrl}" hx-trigger="load" hx-target=".main-content" hx-swap="outerHTML">
+                                <div hx-get="${escapedInitialItemsUrl}" hx-trigger="load" hx-target="#photo-grid" hx-swap="outerHTML">
                                     Loading initial content...
                                 </div>
                             </div>
