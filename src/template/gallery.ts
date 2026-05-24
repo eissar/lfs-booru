@@ -3,7 +3,6 @@ import { html } from '@/html.ts';
 
 export default function gallery(
     title: string,
-    cards: string[],
     version: string,
 ): string {
     const escapedTitle = escape(title);
@@ -19,9 +18,7 @@ export default function gallery(
             </head>
             <body data-renderer-version="${escapedVersion}">
                 <h1>${escapedTitle}</h1>
-                <div>
-                    ${cards.join('\n')}
-                </div>
+                <div></div>
             </body>
         </html>
     `;

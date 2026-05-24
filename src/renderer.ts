@@ -32,7 +32,6 @@ export interface HtmlRenderer {
      */
     renderGalleryPage(input: {
         title: string;
-        cards: string[];
     }): Promise<string>;
 }
 
@@ -103,13 +102,11 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      */
     async renderGalleryPage(input: {
         title: string;
-        cards: string[];
     }): Promise<string> {
         const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
             version: this.version,
             title: input.title,
-            cards: input.cards,
         }));
         const cacheDir = join(this.artifactsPath, 'gallery-pages');
         const cachePath = join(cacheDir, `${cacheKey}.html`);
@@ -120,7 +117,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = template.page.Gallery(input.title, input.cards, this.version);
+        const html = template.page.Gallery(input.title, this.version);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);

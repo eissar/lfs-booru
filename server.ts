@@ -42,26 +42,7 @@ function createHandler(
         }
 
         if (url.pathname === '/gallery') {
-            const tags = url.searchParams.get('tags');
-            const tagList = tags && tags.split(',') || [];
-
-            const tagIndex = JSON.parse(Deno.readTextFileSync(join(lib.path, 'index', 'tag_index.json')));
-            const ids = Object.keys(tagIndex)
-                .filter((key) => tagList.includes(key))
-                .flatMap((key) => tagIndex[key]) || [];
-
-            let imageList: AsyncIterable<[string, ImageState]>;
-
-            imageList = store.listImages();
-            if (ids.length > 0) imageList = store.listImagesByIds(ids);
-
-            const images: GalleryImage[] = [];
-            for await (const [id, img] of imageList) {
-                if (img.oid) images.push({ id, ...img });
-            }
-            const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
-
-            return c.html(await render.renderGalleryPage({ title: 'Gallery', cards: cards }));
+            return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
