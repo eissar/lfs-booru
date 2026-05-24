@@ -14,19 +14,30 @@ const TEMPLATE = fromFileUrl(new URL('../libraries/template', import.meta.url));
 /**
  * Idempotently initialize a booru library repo by cloning ./libraries/template.
  *
- * @panics if TEMPLATE cannot be resolved
- * @returns `null` on success, or `Error` when clone fails.
- * @throws Error, GitError, GitConstructError from simpleGit
+ * If `repoPath` already contains a `.git` directory, the function returns
+ * immediately (`null`). Otherwise it clones the template and configures LFS
+ * skip-smudge and an upstream remote.
  *
- * This intentionally does not call `git lfs ...` and does not edit .git/config.
- * `git clone` will create .git/config as normal Git repository metadata, but this
- * function does not write local Git config settings after cloning.
+ * @panics if TEMPLATE cannot be resolved, or if clone/write fails after the
+ *         directory check
+ * @returns `null` on success (including when already initialized), or `Error`
+ *          when clone fails
+ * @throws Error, GitError, GitConstructError from simpleGit
  */
 export async function Init(repoPath: string): Promise<null | Error> {
-    // TODO: MustResolve(TEMPLATE) at startup?
-    const template = await Deno.realPath(TEMPLATE).catch((e: Error) => panic(e.message));
-
     const repo = resolve(repoPath);
+    const gitDir = join(repo, '.git');
+
+    // already initialized – idempotent no-op
+    const gitDirExists = await Deno.stat(gitDir)
+        .then((stat) => stat.isDirectory)
+        .catch((error) => {
+            if (error instanceof Deno.errors.NotFound) return false;
+            throw error;
+        });
+    if (gitDirExists) return null;
+
+    const template = await Deno.realPath(TEMPLATE).catch((e: Error) => panic(e.message));
 
     // pass deno env like?
     // .env({ ...Deno.env.toObject(), GIT_LFS_SKIP_SMUDGE: '1' })

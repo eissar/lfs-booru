@@ -169,6 +169,9 @@ async function Start(port: number = 8000) {
 
     const lib: LibConn = { path: cfg.lib };
 
+    // idempotent
+    await Init(lib.path);
+
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
