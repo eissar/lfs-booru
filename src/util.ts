@@ -10,7 +10,7 @@ export const isInt = Number.isSafeInteger as (v: unknown) => v is number;
  * @namespace
  */
 export const c = {
-    json: (data: Parameters<JSON['stringify']>, status: number = 200): Response =>
+    json: (data: Parameters<JSON['stringify']>[0], status: number = 200): Response =>
         new Response(
             JSON.stringify(data),
             {

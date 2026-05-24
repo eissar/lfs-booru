@@ -1,3 +1,5 @@
+does not throw or log error
+when failing to clone new library
 
  2. Add server-side LFS object caching (no checkout-based hydration)
  - Keep serving binaries via direct LFS HTTP requests.
