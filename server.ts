@@ -1,20 +1,25 @@
 import { serveDir } from '@std/http/file-server';
-import { join } from '@std/path';
 
 import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
 
+import { getFlags } from '@/cli.ts';
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
-import { AddEvent, ImageState, processEvents } from '@/indexer.ts';
+import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug } from '@/logging.ts';
-import { CachingHtmlRenderer, GalleryImage, HtmlRenderer } from '@/renderer.ts';
+import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c } from '@/util.ts';
-import { getFlags } from '@/cli.ts';
+
+async function handleUiRoutes(url: URL, render: HtmlRenderer): Promise<void | Response> {
+    if (url.pathname === '/gallery') {
+        return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
+    }
+}
 
 function createHandler(
     store: DerivedIndexStore,
@@ -39,10 +44,6 @@ function createHandler(
         if (url.pathname === '/') {
             // 301?
             return Response.redirect(new URL('/gallery', url.origin), 302);
-        }
-
-        if (url.pathname === '/gallery') {
-            return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
         }
 
         if (url.pathname === '/ingest' && req.method === 'POST') {
@@ -119,6 +120,11 @@ function createHandler(
                 fsRoot: './static',
                 urlRoot: 'static', // trim /static
             });
+        }
+
+        {
+            const uiResponse = await handleUiRoutes(url, render);
+            if (uiResponse) return uiResponse;
         }
 
         return new Response('Not Found', { status: 404 });
