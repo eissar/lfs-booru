@@ -7,8 +7,6 @@ import { isInt } from '@/util.ts';
 export type ItemsFilter = {
     limit: number;
     tags?: string[];
-    // TODO:
-    // keyword?: string
 };
 
 // TODO:

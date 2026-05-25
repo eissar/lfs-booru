@@ -17,7 +17,7 @@ import { c, isInt } from '@/util.ts';
 
 async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRenderer): Promise<void | Response> {
     if (url.pathname === '/gallery') {
-        return c.html(await render.renderGalleryPage({ title: 'Gallery', itemSearch: url.search }));
+        return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
     }
 
     if (url.pathname === '/fragment/items') {

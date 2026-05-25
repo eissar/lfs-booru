@@ -6,17 +6,14 @@ import { html } from '@/html.ts';
  *
  * @param title - The page title.
  * @param version - The renderer/template version.
- * @param itemSearch - Query string forwarded to the initial item fragment request.
  * @returns {string} HTML string
  */
 export default function gallery(
     title: string,
     version: string,
-    itemSearch: string,
 ): string {
     const escapedTitle = escape(title);
     const escapedVersion = escape(version);
-    const escapedInitialItemsUrl = escape(`/fragment/items${itemSearch}`);
 
     return html`
         <!DOCTYPE html>
@@ -69,38 +66,6 @@ export default function gallery(
                     <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div class="flex items-center justify-between h-16">
                             <div class="flex items-center gap-4 text-sm flex-1 min-w-0 justify-end">
-                                <div class="relative w-full max-w-xs flex-shrink-0">
-                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg
-                                            width="16"
-                                            height="16"
-                                            style="color: var(--text-muted); filter: var(--icon-filter);"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                            >
-                                            </path>
-                                        </svg>
-                                    </div>
-                                    <input
-                                        id="search-input"
-                                        type="search"
-                                        name="keyword"
-                                        placeholder="keyword search"
-                                        hx-get="/fragment/items"
-                                        hx-trigger="keyup changed delay:500ms"
-                                        hx-target="#photo-grid"
-                                        hx-swap="outerHTML"
-                                        hx-indicator=".htmx-indicator"
-                                        class="block w-full border border-transparent rounded-lg py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-transparent input-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 focus-visible:border-transparent"
-                                    />
-                                </div>
                                 <div class="relative inline-block">
                                     <button
                                         id="dark-mode-toggle"
@@ -185,7 +150,7 @@ export default function gallery(
                     <div class="layout">
                         <section class="main-content">
                             <div id="photo-grid" class="masonry-grid">
-                                <div hx-get="${escapedInitialItemsUrl}" hx-trigger="load" hx-target="#photo-grid" hx-swap="outerHTML">
+                                <div hx-get="/fragment/items" hx-trigger="load" hx-target="#photo-grid" hx-swap="outerHTML">
                                     Loading initial content...
                                 </div>
                             </div>

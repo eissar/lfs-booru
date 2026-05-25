@@ -33,8 +33,6 @@ export interface HtmlRenderer {
     renderGalleryPage(input: {
         /** Page title. */
         title: string;
-        /** Query string forwarded to the initial item fragment request. */
-        itemSearch: string;
     }): Promise<string>;
 
     renderPhotoGrid(input: { cards: string }): Promise<string>;
@@ -108,14 +106,11 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     async renderGalleryPage(input: {
         /** Page title. */
         title: string;
-        /** Query string forwarded to the initial item fragment request. */
-        itemSearch: string;
     }): Promise<string> {
         const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
             version: this.version,
             title: input.title,
-            itemSearch: input.itemSearch,
         }));
         const cacheDir = join(this.artifactsPath, 'gallery-pages');
         const cachePath = join(cacheDir, `${cacheKey}.html`);
@@ -126,7 +121,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = template.page.Gallery(input.title, this.version, input.itemSearch);
+        const html = template.page.Gallery(input.title, this.version);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
