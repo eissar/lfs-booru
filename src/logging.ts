@@ -2,6 +2,14 @@
 
 const DEBUG = true;
 
+const TRACE = true; // Or loaded from process.env / config
+
+export function trace(fn: (() => void) | (() => Promise<void>)) {
+    if (TRACE) {
+        fn();
+    }
+}
+
 const originalLog = console.log;
 
 const filePath = 'app.log';
