@@ -1,6 +1,7 @@
 import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
 import { ItemsFilter } from '@/index_store.ts';
+import { debug } from '../logging.ts';
 
 function renderHiddenInput(name: string, value: string): string {
     return html`
@@ -14,11 +15,23 @@ function renderFilterBar(keyword: string | false, tag: string): string {
 
     const query = params.toString();
     const removeUrl = query ? `/gallery?${query}` : '/gallery';
+    const fragmentUrl = query ? `/fragment/items?${query}` : '/fragment/items';
     const escapedTag = escape(tag);
+    debug('RENDER');
+    debug(escapedTag);
 
     return html`
-        <input type="hidden" name="tags" value="${escapedTag}">
-        <a href="${escape(removeUrl)}" aria-label="Remove tag ${escapedTag}">#${escapedTag}×</a>
+        <span class="filter-chip">
+            <input type="hidden" name="tags" value="${escapedTag}">
+            <a
+                href="${escape(removeUrl)}"
+                hx-get="${escape(fragmentUrl)}"
+                hx-target="#photo-grid"
+                hx-swap="outerHTML"
+                hx-push-url="${escape(removeUrl)}"
+                hx-on::after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
+            >#${escapedTag}×</a>
+        </span>
     `;
 }
 

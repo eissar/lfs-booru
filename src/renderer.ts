@@ -113,7 +113,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
             version: this.version,
-            title: input.title,
+            input: input,
         }));
         const cacheDir = join(this.artifactsPath, 'gallery-pages');
         const cachePath = join(cacheDir, `${cacheKey}.html`);
