@@ -15,6 +15,7 @@
     "jsr:@std/fs@^1.0.23": "1.0.23",
     "jsr:@std/html@*": "1.0.6",
     "jsr:@std/html@^1.0.6": "1.0.6",
+    "jsr:@std/http@*": "1.1.0",
     "jsr:@std/http@^1.1.0": "1.1.0",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/media-types@^1.1.0": "1.1.0",

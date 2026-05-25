@@ -1,3 +1,5 @@
+import { STATUS_CODE as Status } from 'jsr:@std/http/status';
+
 /**
  * Print an error message to stderr and terminate the process.
  *
@@ -14,7 +16,7 @@ export const isInt = Number.isSafeInteger as (v: unknown) => v is number;
 
 /** Utility functions for creating HTTP response objects. */
 export const c = {
-    json: (data: Parameters<JSON['stringify']>[0], status: number = 200): Response =>
+    json: (data: Parameters<JSON['stringify']>[0], status: number = Status.OK): Response =>
         new Response(
             JSON.stringify(data),
             {
@@ -23,7 +25,7 @@ export const c = {
             },
         ),
 
-    text: (text: string, status: number = 200): Response =>
+    text: (text: string, status: number = Status.OK): Response =>
         new Response(
             text,
             {
@@ -35,7 +37,7 @@ export const c = {
     blob: (
         buffer: Uint8Array,
         contentType: string = 'application/octet-stream',
-        status: number = 200,
+        status: number = Status.OK,
     ): Response =>
         new Response(
             new Uint8Array(buffer),
@@ -45,7 +47,7 @@ export const c = {
             },
         ),
 
-    html: (html: string, status: number = 200): Response =>
+    html: (html: string, status: number = Status.OK): Response =>
         new Response(
             html,
             {
@@ -56,7 +58,7 @@ export const c = {
 
     error: (
         message: string,
-        status: number = 500,
+        status: number = Status.InternalServerError,
     ): Response =>
         new Response(
             `Error: ${message}`,
@@ -67,4 +69,8 @@ export const c = {
                 },
             },
         ),
+
+    redirect: (location: string | URL, status: number = Status.Found): Response => {
+        return Response.redirect(location, status);
+    },
 };

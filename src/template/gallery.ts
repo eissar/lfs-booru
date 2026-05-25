@@ -1,5 +1,26 @@
 import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
+import { ItemsFilter } from '@/index_store.ts';
+
+function renderHiddenInput(name: string, value: string): string {
+    return html`
+        <input type="hidden" name="${escape(name)}" value="${escape(value)}">
+    `;
+}
+
+function renderFilterBar(keyword: string | false, tag: string): string {
+    const params = new URLSearchParams();
+    if (keyword) params.set('keyword', keyword);
+
+    const query = params.toString();
+    const removeUrl = query ? `/gallery?${query}` : '/gallery';
+    const escapedTag = escape(tag);
+
+    return html`
+        <input type="hidden" name="tags" value="${escapedTag}">
+        <a href="${escape(removeUrl)}" aria-label="Remove tag ${escapedTag}">#${escapedTag}×</a>
+    `;
+}
 
 /**
  * Renders the main gallery HTML page.
@@ -11,9 +32,19 @@ import { html } from '@/html.ts';
 export default function gallery(
     title: string,
     version: string,
+    search: ItemsFilter,
 ): string {
     const escapedTitle = escape(title);
     const escapedVersion = escape(version);
+
+    const hiddenTagInputs: string = search?.tags
+        ?.map((tag) => renderHiddenInput('tags', tag))
+        .join('\n') ?? '';
+
+    // TODO: ItemsFilter.keyword
+    const filterBar: string = search?.tags
+        ?.map((tag) => renderFilterBar(false, tag))
+        .join('\n') ?? '';
 
     return html`
         <!DOCTYPE html>
@@ -66,6 +97,27 @@ export default function gallery(
                     <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div class="flex items-center justify-between h-16">
                             <div class="flex items-center gap-4 text-sm flex-1 min-w-0 justify-end">
+                                <form
+                                    id="search-form"
+                                    method="get"
+                                    action="/gallery"
+                                    class="flex items-center gap-2 w-full max-w-xs flex-shrink-0"
+                                >
+                                    <input
+                                        id="search-input"
+                                        type="search"
+                                        name="q"
+                                        placeholder="Search..."
+                                        class="block w-full border border-transparent rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-transparent input-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 focus-visible:border-transparent"
+                                    >
+                                    ${hiddenTagInputs}
+                                    <button
+                                        type="submit"
+                                        class="py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                    >
+                                        Search
+                                    </button>
+                                </form>
                                 <div class="relative inline-block">
                                     <button
                                         id="dark-mode-toggle"
@@ -147,10 +199,19 @@ export default function gallery(
                     </div>
                 </header>
                 <main class="max-w-screen-2xl mx-auto p-5 sm:p-6 lg:p-8">
+                    <div id="filter-bar">
+                        ${filterBar}
+                    </div>
                     <div class="layout">
                         <section class="main-content">
                             <div id="photo-grid" class="masonry-grid">
-                                <div hx-get="/fragment/items" hx-trigger="load" hx-target="#photo-grid" hx-swap="outerHTML">
+                                <div
+                                    hx-get="/fragment/items"
+                                    hx-trigger="load"
+                                    hx-target="#photo-grid"
+                                    hx-swap="outerHTML"
+                                    hx-include="#filter-bar"
+                                >
                                     Loading initial content...
                                 </div>
                             </div>

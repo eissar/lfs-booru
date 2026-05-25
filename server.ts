@@ -15,13 +15,61 @@ import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c, isInt } from '@/util.ts';
 
+const MIN_LIMIT = 10;
+
+/**
+ * Parse a human search query into structured gallery query parameters.
+ *
+ * @param query Raw search query text.
+ * @returns URL search parameters with `keyword` and repeated `tags` entries.
+ */
+function parseSearchQuery(query: string): URLSearchParams {
+    const params = new URLSearchParams();
+    const keywordTokens: string[] = [];
+
+    for (const token of query.split(/\s+/).map((part) => part.trim()).filter((part) => part.length > 0)) {
+        if (token.startsWith('#') && token.length > 1) {
+            params.append('tags', token.slice(1));
+            continue;
+        }
+
+        keywordTokens.push(token);
+    }
+
+    const keyword = keywordTokens.join(' ').trim();
+    if (keyword) params.set('keyword', keyword);
+
+    return params;
+}
+
 async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRenderer): Promise<void | Response> {
+    // search
+    if (url.pathname === '/gallery' && url.searchParams.has('q')) {
+        const queryString = url.searchParams.get('q');
+        if (!queryString) return c.error('invalid query');
+
+        const params = parseSearchQuery(queryString);
+
+        return c.redirect(new URL(`/gallery?${params}`, url.origin));
+    }
     if (url.pathname === '/gallery') {
-        return c.html(await render.renderGalleryPage({ title: 'Gallery' }));
+        let limit = Number(url.searchParams.get('limit'));
+        if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
+
+        const tags = url.searchParams.getAll('tags')
+            .flatMap((value) => value.split(','))
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
+
+        return c.html(
+            await render.renderGalleryPage({
+                filter: { limit, tags },
+                title: 'Gallery',
+            }),
+        );
     }
 
     if (url.pathname === '/fragment/items') {
-        const MIN_LIMIT = 10;
         let limit = Number(url.searchParams.get('limit'));
         if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
 

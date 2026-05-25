@@ -3,6 +3,7 @@ import type { ImageState } from '@/indexer.ts';
 // import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
 import { template } from '@/template/index.ts';
+import { ItemsFilter } from '@/index_store.ts';
 
 /**
  * Image state with the derived index identifier attached.
@@ -31,6 +32,7 @@ export interface HtmlRenderer {
      * @returns Rendered gallery page HTML.
      */
     renderGalleryPage(input: {
+        filter: ItemsFilter;
         /** Page title. */
         title: string;
     }): Promise<string>;
@@ -104,6 +106,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @returns Rendered gallery page HTML.
      */
     async renderGalleryPage(input: {
+        filter: ItemsFilter;
         /** Page title. */
         title: string;
     }): Promise<string> {
@@ -121,7 +124,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
         if (cached !== null) return cached;
 
-        const html = template.page.Gallery(input.title, this.version);
+        const html = template.page.Gallery(input.title, this.version, input.filter);
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
