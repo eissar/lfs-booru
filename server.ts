@@ -5,13 +5,13 @@ import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git'
 import { getFlags } from '@/cli.ts';
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
-import { stageAndCommit } from '@/git.ts';
+import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
 import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
-import { debug } from '@/logging.ts';
+import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c, isInt } from '@/util.ts';
 
@@ -155,6 +155,28 @@ function createHandler(
     };
 }
 
+export function withLogging(
+    handler: (req: Request) => Promise<Response>,
+): (req: Request) => Promise<Response> {
+    return async (req: Request): Promise<Response> => {
+        trace(() => performance.mark('req-start'));
+
+        const response = await handler(req);
+
+        trace(() => {
+            const startTime = performance.getEntriesByName('req-start').at(-1)?.startTime || 0;
+            const duration = performance.now() - startTime;
+            console.log(
+                `method=${req.method} path=${new URL(req.url).pathname} code=${response.status} ms=${
+                    duration.toFixed(2)
+                }`,
+            );
+            performance.clearMarks('req-start');
+        });
+        return response;
+    };
+}
+
 // blocking
 async function Start(port: number = 8000) {
     // todo: process flags
@@ -192,7 +214,9 @@ async function Start(port: number = 8000) {
         await processEvents(store, eventLog);
     }
 
-    Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render));
+    const h = createHandler(store, eventLog, conn, lib, render);
+
+    Deno.serve({ port }, withLogging(h));
 }
 
 if (import.meta.main) {
