@@ -132,6 +132,53 @@ export default function gallery(
                                     </button>
                                 </form>
                                 <div class="relative inline-block">
+                                    <details class="relative" name="header">
+                                        <summary
+                                            id="settings-button"
+                                            class="p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer list-none hover-surface"
+                                        >
+                                            <img
+                                                src="https://unpkg.com/heroicons@2.0.13/24/outline/cog.svg"
+                                                class="h-5 w-5"
+                                                style="filter: var(--icon-filter);"
+                                                alt="Settings"
+                                            />
+                                        </summary>
+                                        <div
+                                            class="absolute right-0 mt-2 w-64 rounded shadow-lg z-10 dropdown-container"
+                                            style="background-color: var(--bg-surface);"
+                                        >
+                                            <form
+                                                id="preferences"
+                                                method="get"
+                                                action="/gallery"
+                                                class="p-4 rounded-md space-y-3"
+                                            >
+                                                ${hiddenTagInputs}
+                                                <label class="block text-sm font-medium" for="page-size-input">
+                                                    Page size
+                                                </label>
+                                                <select
+                                                    id="page-size-input"
+                                                    name="limit"
+                                                    class="block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                >
+                                                    <option value="10">10</option>
+                                                    <option value="25">25</option>
+                                                    <option value="50">50</option>
+                                                    <option value="100">100</option>
+                                                </select>
+                                                <button
+                                                    type="submit"
+                                                    class="w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                >
+                                                    Apply
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </details>
+                                </div>
+                                <div class="relative inline-block">
                                     <button
                                         id="dark-mode-toggle"
                                         class="p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface"
@@ -223,7 +270,7 @@ export default function gallery(
                                     hx-trigger="load"
                                     hx-target="#photo-grid"
                                     hx-swap="outerHTML"
-                                    hx-include="#filter-bar"
+                                    hx-include="#filter-bar,#preferences,#pagination-controls"
                                 >
                                     Loading initial content...
                                 </div>

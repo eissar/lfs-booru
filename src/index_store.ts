@@ -7,6 +7,7 @@ import { isInt } from '@/util.ts';
 export type ItemsFilter = {
     limit: number;
     tags?: string[];
+    offset?: number;
 };
 
 // TODO:
@@ -273,6 +274,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const limit = options.limit ?? Infinity;
         if (limit <= 0) return;
 
+        const offset = options.offset ?? 0;
+        let skipped = 0;
         let yielded = 0;
 
         for (const id in entries) {
@@ -281,6 +284,11 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             if (options.tags && options.tags.length > 0) {
                 const matches = options.tags.some((t) => imageState.tags.includes(t));
                 if (!matches) continue;
+            }
+
+            if (skipped < offset) {
+                skipped++;
+                continue;
             }
 
             yield [id, imageState];

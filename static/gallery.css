@@ -232,7 +232,7 @@ body {
     display: block;
 }
 
-#load-more-trigger {
+#pagination-controls {
     break-inside: avoid;
     column-span: all;
     /* forces the element to span the full width of the masonry columns */

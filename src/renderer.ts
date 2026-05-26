@@ -37,7 +37,7 @@ export interface HtmlRenderer {
         title: string;
     }): Promise<string>;
 
-    renderPhotoGrid(input: { cards: string }): Promise<string>;
+    renderPhotoGrid(input: { cards: string; offset: string; hasMore: boolean }): Promise<string>;
 }
 
 /**
@@ -123,8 +123,8 @@ export class CachingHtmlRenderer implements HtmlRenderer {
             throw error;
         });
         if (cached !== null) return cached;
-
         const html = template.page.Gallery(input.title, this.version, input.filter);
+
         await Deno.mkdir(cacheDir, { recursive: true });
 
         const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
@@ -139,9 +139,13 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         return html;
     }
 
-    /** {@inheritDoc HtmlRenderer.renderPhotoGrid} */
-    async renderPhotoGrid(input: { cards: string }): Promise<string> {
-        return await Promise.resolve(template.fragment.photoGrid(input.cards));
+    // TODO: rename to renderCardGrid ?
+    //
+    /** {@inheritDoc HtmlRenderer.renderPhotoGrid}
+     * @param input.offset - how many cards have been served
+     */
+    async renderPhotoGrid(input: { cards: string; offset: string; hasMore: boolean }): Promise<string> {
+        return await Promise.resolve(template.fragment.photoGrid(input.cards, input.offset, input.hasMore));
     }
 }
 

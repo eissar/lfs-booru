@@ -6,7 +6,7 @@ import { getFlags } from '@/cli.ts';
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
-import { DerivedIndexStore, JsonFileIndexStore } from '@/index_store.ts';
+import { DerivedIndexStore, ItemsFilter, JsonFileIndexStore } from '@/index_store.ts';
 import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
@@ -73,23 +73,51 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         let limit = Number(url.searchParams.get('limit'));
         if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
 
+        let offset: number | false = false;
+        if (url.searchParams.has('offset')) {
+            offset = Number(url.searchParams.get('offset'));
+            if (!isInt(offset) || offset < 0) return c.error('invalid offset');
+        }
+
         const tags = url.searchParams.getAll('tags')
             .flatMap((value) => value.split(','))
             .map((tag) => tag.trim())
             .filter((tag) => tag.length > 0);
 
-        const imageList = store.listItems({
+        const opts: ItemsFilter = {
             limit,
             tags,
-        });
+        };
+        if (offset) opts.offset = offset;
+
+        const imageList = store.listItems(opts);
 
         const images = [];
         for await (const [id, img] of imageList) {
             if (img.oid) images.push({ id, ...img });
         }
         const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
+        const rendered = cards.length;
 
-        return c.html(await render.renderPhotoGrid({ cards: cards.join('') }));
+        let hasMore = true;
+
+        // more accurately, store.listItems returns len items gt filter.limit
+        // but this is the easier, stateless way to do this without refactoring
+        // that function
+        if (limit > rendered) hasMore = false;
+        debug([limit, rendered, limit > rendered]);
+        debug(hasMore);
+
+        if (offset) offset = offset + images.length;
+        else offset = images.length;
+
+        return c.html(
+            await render.renderPhotoGrid({
+                cards: cards.join(''),
+                offset: String(offset),
+                hasMore,
+            }),
+        );
     }
 }
 
