@@ -264,27 +264,29 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 
     async *listItems(options: ItemsFilter): AsyncIterable<[string, ImageState]> {
-        let entries: [string, ImageState][];
+        let entries: ImageStateIndex;
 
         {
             using _lock = await this.mu.acquire();
             const statePath = join(this.conn.path, 'index', 'image_state.json');
-            const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-            entries = Object.entries(imageState);
-        }
-
-        if (options.tags && options.tags.length > 0) {
-            entries = entries.filter(([_id, imageState]) => {
-                return options.tags!.some((t) => imageState.tags.includes(t));
-            });
+            entries = await readJsonFile(statePath, () => ({} as ImageStateIndex));
         }
 
         const limit = options.limit ?? Infinity;
         if (limit <= 0) return;
 
         let yielded = 0;
-        for (const entry of entries) {
-            yield entry;
+
+        for (const id in entries) {
+            const imageState = entries[id];
+
+            if (options.tags && options.tags.length > 0) {
+                const matches = options.tags.some((t) => imageState.tags.includes(t));
+                if (!matches) continue;
+            }
+
+            yield [id, imageState];
+
             yielded++;
             if (yielded >= limit) return;
         }
