@@ -1,6 +1,7 @@
 {
     "tasks": {
-        "run": "deno run --allow-all ./server.ts"
+        "run": "deno run --allow-all ./server.ts",
+        "render:lint-artifacts": "deno run --allow-write=.lint-artifacts,app.log scripts/render_lint_artifacts.ts"
     },
     "fmt": {
         "exclude": [
