@@ -3,10 +3,114 @@ import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs
 import { AddEvent } from './indexer.ts';
 import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
+import { startsWith } from '@std/bytes';
 import { dirname, join } from '@std/path';
 
+const MAGIC_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const MAGIC_JPEG = new Uint8Array([0xff, 0xd8, 0xff]);
+const MAGIC_GIF_87A = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]);
+const MAGIC_GIF_89A = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+const MAGIC_RIFF = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+const MAGIC_WEBP = new Uint8Array([0x57, 0x45, 0x42, 0x50]);
+const MAGIC_AVI = new Uint8Array([0x41, 0x56, 0x49, 0x20]);
+const MAGIC_FTYP = new Uint8Array([0x66, 0x74, 0x79, 0x70]);
+const MAGIC_EBML = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]);
+const MAGIC_FLV = new Uint8Array([0x46, 0x4c, 0x56]);
+const MAGIC_OGG = new Uint8Array([0x4f, 0x67, 0x67, 0x53]);
+const MAGIC_MPEG_PROGRAM_STREAM = new Uint8Array([0x00, 0x00, 0x01, 0xba]);
+const MAGIC_MPEG_VIDEO_STREAM = new Uint8Array([0x00, 0x00, 0x01, 0xb3]);
+const MAGIC_ASF = new Uint8Array([
+    0x30,
+    0x26,
+    0xb2,
+    0x75,
+    0x8e,
+    0x66,
+    0xcf,
+    0x11,
+    0xa6,
+    0xd9,
+    0x00,
+    0xaa,
+    0x00,
+    0x62,
+    0xce,
+    0x6c,
+]);
+const BRAND_3GP = new Uint8Array([0x33, 0x67, 0x70]);
+const BRAND_AVIF = new Uint8Array([0x61, 0x76, 0x69, 0x66]);
+const BRAND_M4V = new Uint8Array([0x4d, 0x34, 0x56]);
+const BRAND_QT = new Uint8Array([0x71, 0x74, 0x20, 0x20]);
+const DOCTYPE_MATROSKA = new Uint8Array([0x6d, 0x61, 0x74, 0x72, 0x6f, 0x73, 0x6b, 0x61]);
+const DOCTYPE_WEBM = new Uint8Array([0x77, 0x65, 0x62, 0x6d]);
+
+function isPng(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer, MAGIC_PNG);
+}
+
+function isJpeg(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer, MAGIC_JPEG);
+}
+
+function isGif(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer, MAGIC_GIF_87A) || startsWith(fileBuffer, MAGIC_GIF_89A);
+}
+
+function isWebp(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer, MAGIC_RIFF) && startsWith(fileBuffer.subarray(8), MAGIC_WEBP);
+}
+
+function isAvi(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer, MAGIC_RIFF) && startsWith(fileBuffer.subarray(8), MAGIC_AVI);
+}
+
+function isIsoBaseMediaFile(fileBuffer: Uint8Array): boolean {
+    return startsWith(fileBuffer.subarray(4), MAGIC_FTYP);
+}
+
+function containsBytes(haystack: Uint8Array, needle: Uint8Array): boolean {
+    for (let index = 0; index <= haystack.length - needle.length; index++) {
+        if (startsWith(haystack.subarray(index), needle)) return true;
+    }
+    return false;
+}
+
+function detectIsoBaseMediaFileExtension(fileBuffer: Uint8Array): string | null {
+    if (!isIsoBaseMediaFile(fileBuffer)) return null;
+
+    const brands = fileBuffer.subarray(8, Math.min(fileBuffer.length, 64));
+    if (containsBytes(brands, BRAND_AVIF)) return 'avif';
+    if (containsBytes(brands, BRAND_QT)) return 'mov';
+    if (containsBytes(brands, BRAND_3GP)) return '3gp';
+    if (containsBytes(brands, BRAND_M4V)) return 'm4v';
+    return 'mp4';
+}
+
+function detectEbmlFileExtension(fileBuffer: Uint8Array): string | null {
+    if (!startsWith(fileBuffer, MAGIC_EBML)) return null;
+
+    const header = fileBuffer.subarray(0, Math.min(fileBuffer.length, 4096));
+    if (containsBytes(header, DOCTYPE_WEBM)) return 'webm';
+    if (containsBytes(header, DOCTYPE_MATROSKA)) return 'mkv';
+    return 'mkv';
+}
+
+function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
+    if (isPng(fileBuffer)) return 'png';
+    if (isJpeg(fileBuffer)) return 'jpg';
+    if (isGif(fileBuffer)) return 'gif';
+    if (isWebp(fileBuffer)) return 'webp';
+    if (isAvi(fileBuffer)) return 'avi';
+    if (startsWith(fileBuffer, MAGIC_FLV)) return 'flv';
+    if (startsWith(fileBuffer, MAGIC_OGG)) return 'ogv';
+    if (startsWith(fileBuffer, MAGIC_MPEG_PROGRAM_STREAM)) return 'mpg';
+    if (startsWith(fileBuffer, MAGIC_MPEG_VIDEO_STREAM)) return 'mpv';
+    if (startsWith(fileBuffer, MAGIC_ASF)) return 'wmv';
+    return detectIsoBaseMediaFileExtension(fileBuffer) ?? detectEbmlFileExtension(fileBuffer);
+}
+
 /**
- * Ingest an image file into the library.
+ * Ingest a media file into the library.
  *
  * Computes the SHA-256 OID, pushes the object to the LFS server, writes a
  * Git LFS pointer file, and returns the resulting add event. The caller is
@@ -15,11 +119,11 @@ import { dirname, join } from '@std/path';
  * @param lib Library connection descriptor.
  * @param conn LFS server connection.
  * @param store Derived index store (used to allocate the image ID).
- * @param file Image file to ingest.
- * @param tags Tags to associate with the image.
+ * @param file Media file to ingest.
+ * @param tags Tags to associate with the media item.
  * @param name Optional display name (defaults to `Image {id}`).
- * @param height Optional image height in pixels.
- * @param width Optional image width in pixels.
+ * @param height Optional media height in pixels.
+ * @param width Optional media width in pixels.
  * @param mtime Optional modification time as an ISO-8601 string.
  * @returns The constructed add event.
  */
@@ -58,10 +162,13 @@ export async function ingest(
     const id = await store.allocateImageId();
     if (!name) name = `Image ${id}`;
 
+    const fileExtension = detectMediaFileExtension(bytes);
+    if (!fileExtension) throw new Error('Cannot detect supported media type');
+
     const event: AddEvent = {
         op: 'add',
         id: id,
-        path: `images/${id}.png`,
+        path: `images/${id}.${fileExtension}`,
         oid,
         tags,
         width,
@@ -99,7 +206,7 @@ export async function ingest(
 }
 
 /**
- * Parse a multipart form-data request and ingest the contained image.
+ * Parse a multipart form-data request and ingest the contained media file.
  *
  * Expects form fields `image` (file), `tags` (JSON string array), and
  * optionally `name`.
