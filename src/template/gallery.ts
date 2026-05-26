@@ -195,7 +195,6 @@ export default function gallery(
                                         >
                                     </button>
                                 </div>
-                            </div>
                             <div class="relative inline-block">
                                 <details class="relative" name="header">
                                     <summary
