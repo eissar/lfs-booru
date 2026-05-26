@@ -18,6 +18,7 @@
     "jsr:@std/http@*": "1.1.0",
     "jsr:@std/http@^1.1.0": "1.1.0",
     "jsr:@std/internal@^1.0.12": "1.0.12",
+    "jsr:@std/internal@^1.0.13": "1.0.13",
     "jsr:@std/media-types@^1.1.0": "1.1.0",
     "jsr:@std/net@^1.0.6": "1.0.6",
     "jsr:@std/path@1.1.4": "1.1.4",
@@ -27,7 +28,9 @@
     "jsr:@std/streams@^1.1.0": "1.1.0",
     "npm:@types/node@*": "24.2.0",
     "npm:simple-git@3.36.0": "3.36.0",
-    "npm:stylelint@*": "17.12.0_typescript@6.0.3",
+    "npm:stylelint-config-standard@40": "40.0.0_stylelint@17.12.0__@csstools+css-parser-algorithms@4.0.0___@csstools+css-tokenizer@4.0.0__@csstools+css-tokenizer@4.0.0__css-tree@3.2.1__postcss-selector-parser@7.1.1__typescript@6.0.3__postcss@8.5.15_typescript@6.0.3",
+    "npm:stylelint@*": "17.12.0_@csstools+css-parser-algorithms@4.0.0__@csstools+css-tokenizer@4.0.0_@csstools+css-tokenizer@4.0.0_css-tree@3.2.1_postcss-selector-parser@7.1.1_typescript@6.0.3_postcss@8.5.15",
+    "npm:stylelint@^17.12.0": "17.12.0_@csstools+css-parser-algorithms@4.0.0__@csstools+css-tokenizer@4.0.0_@csstools+css-tokenizer@4.0.0_css-tree@3.2.1_postcss-selector-parser@7.1.1_typescript@6.0.3_postcss@8.5.15",
     "npm:typescript@*": "6.0.3",
     "npm:typescript@6.0.3": "6.0.3"
   },
@@ -45,7 +48,11 @@
       "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
     },
     "@std/cli@1.0.29": {
-      "integrity": "fa4ef29130baa834d8a13b7d138240c3a2fcfba740bfb7afa646a360a15ec84f"
+      "integrity": "fa4ef29130baa834d8a13b7d138240c3a2fcfba740bfb7afa646a360a15ec84f",
+      "dependencies": [
+        "jsr:@std/fmt",
+        "jsr:@std/internal@^1.0.13"
+      ]
     },
     "@std/data-structures@1.0.11": {
       "integrity": "53b98ed7efa61f107dfc14244bd2ec5557f7f7ee0bbaef6d449d7937facacb89"
@@ -85,6 +92,9 @@
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
     },
+    "@std/internal@1.0.13": {
+      "integrity": "2f9546691d4ac2d32859c82dff284aaeac980ddeca38430d07941e7e288725c0"
+    },
     "@std/media-types@1.1.0": {
       "integrity": "c9d093f0c05c3512932b330e3cc1fe1d627b301db33a4c2c2185c02471d6eaa4"
     },
@@ -94,7 +104,7 @@
     "@std/path@1.1.4": {
       "integrity": "1d2d43f39efb1b42f0b1882a25486647cb851481862dc7313390b2bb044314b5",
       "dependencies": [
-        "jsr:@std/internal"
+        "jsr:@std/internal@^1.0.12"
       ]
     },
     "@std/streams@1.0.17": {
@@ -122,7 +132,7 @@
     "@babel/helper-validator-identifier@7.29.7": {
       "integrity": "sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg=="
     },
-    "@cacheable/memory@2.0.9": {
+    "@cacheable/memory@2.0.9_keyv@5.6.0": {
       "integrity": "sha512-HdMx6DoGywB30vacDbBsITbIX4pgFqj1zsrV58jZBUw3klzkNoXhj7qOqAgledhxG7YZI5rBSJg7Zp8/VG0DuA==",
       "dependencies": [
         "@cacheable/utils",
@@ -666,7 +676,20 @@
         "ansi-regex@6.2.2"
       ]
     },
-    "stylelint@17.12.0_typescript@6.0.3": {
+    "stylelint-config-recommended@18.0.0_stylelint@17.12.0__@csstools+css-parser-algorithms@4.0.0___@csstools+css-tokenizer@4.0.0__@csstools+css-tokenizer@4.0.0__css-tree@3.2.1__postcss-selector-parser@7.1.1__typescript@6.0.3__postcss@8.5.15_typescript@6.0.3": {
+      "integrity": "sha512-mxgT2XY6YZ3HWWe3Di8umG6aBmWmHTblTgu/f10rqFXnyWxjKWwNdjSWkgkwCtxIKnqjSJzvFmPT5yabVIRxZg==",
+      "dependencies": [
+        "stylelint"
+      ]
+    },
+    "stylelint-config-standard@40.0.0_stylelint@17.12.0__@csstools+css-parser-algorithms@4.0.0___@csstools+css-tokenizer@4.0.0__@csstools+css-tokenizer@4.0.0__css-tree@3.2.1__postcss-selector-parser@7.1.1__typescript@6.0.3__postcss@8.5.15_typescript@6.0.3": {
+      "integrity": "sha512-EznGJxOUhtWck2r6dJpbgAdPATIzvpLdK9+i5qPd4Lx70es66TkBPljSg4wN3Qnc6c4h2n+WbUrUynQ3fanjHw==",
+      "dependencies": [
+        "stylelint",
+        "stylelint-config-recommended"
+      ]
+    },
+    "stylelint@17.12.0_@csstools+css-parser-algorithms@4.0.0__@csstools+css-tokenizer@4.0.0_@csstools+css-tokenizer@4.0.0_css-tree@3.2.1_postcss-selector-parser@7.1.1_typescript@6.0.3_postcss@8.5.15": {
       "integrity": "sha512-KIlzWXMHUvgfPUR0R7TK3H80yCIi0uoivUwf+6Az4yrHJD1Q3c1qIkh/H5Z0i/K3QXgtq/UMEkWyBUSUwnpnOg==",
       "dependencies": [
         "@csstools/css-calc",

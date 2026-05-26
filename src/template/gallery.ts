@@ -21,7 +21,7 @@ function renderFilterBar(keyword: string | false, tag: string): string {
     debug(escapedTag);
 
     return html`
-        <span class="filter-chip">
+        <span class="filter-chip text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">
             <input type="hidden" name="tags" value="${escapedTag}">
             <a
                 href="${escape(removeUrl)}"

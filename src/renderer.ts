@@ -85,7 +85,9 @@ export class CachingHtmlRenderer implements HtmlRenderer {
             if (query) tagUrl = `/gallery?${query}`;
 
             return html`
-                <a class="image-card-tags" href="${tagUrl}">${tag}</a>
+                <span class="text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">
+                    <a class="image-card-tags" href="${tagUrl}">${tag}</a>
+                </span>
             `;
         };
 
