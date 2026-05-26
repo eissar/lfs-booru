@@ -254,7 +254,7 @@ export function withLogging(
 }
 
 // blocking
-async function Start(port: number = 8000) {
+async function Start() {
     // todo: process flags
     const cfg = getFlags();
 
@@ -292,7 +292,7 @@ async function Start(port: number = 8000) {
 
     const h = createHandler(store, eventLog, conn, lib, render);
 
-    Deno.serve({ port }, withLogging(h));
+    Deno.serve({ port: cfg.port }, withLogging(h));
 }
 
 if (import.meta.main) {
