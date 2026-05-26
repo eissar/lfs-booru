@@ -319,3 +319,8 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
     flex: 1;
     overflow: auto;
 }
+
+.main-scroll {
+    overflow-y: auto;
+    scrollbar-gutter: stable both-edges;
+}

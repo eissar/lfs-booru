@@ -5,9 +5,8 @@ function renderLoadMoreButton(offset: string, hasMore: boolean): string {
     const nextOffset = escape(offset);
     if (hasMore) {
         return html`
-            <div id="pagination-controls">
+            <div id="pagination-controls" class="px-1 pb-1">
                 <input type="hidden" name="offset" value="${nextOffset}">
-                <div>Showing ${nextOffset}</div>
                 <button
                     type="button"
                     hx-get="/fragment/items"
@@ -17,17 +16,15 @@ function renderLoadMoreButton(offset: string, hasMore: boolean): string {
                     hx-include="#filter-bar,#preferences,#pagination-controls"
                     class="mt-6 w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
-                    Load more
+                    Load more <span class="text-sm opacity-80">(showing ${nextOffset})</span>
                 </button>
             </div>
         `;
     }
     return html`
-        <div id="pagination-controls">
+        <div id="pagination-controls" class="px-1 pb-1">
             <input type="hidden" name="offset" value="${nextOffset}">
-            <div>Showing ${nextOffset}</div>
-            <input type="hidden" name="offset" value="${nextOffset}">
-            No More to Show
+            No More to Show <span class="text-sm opacity-80">(showing ${nextOffset})</span>
         </div>
     `;
 }

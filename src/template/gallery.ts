@@ -257,7 +257,7 @@ export default function gallery(
                         </div>
                     </div>
                 </header>
-                <main class="max-w-screen-2xl mx-auto p-5 sm:p-6 lg:p-8">
+                <main class="max-w-screen-2xl mx-auto p-5 sm:p-6 lg:p-8 main-scroll">
                     <div id="filter-bar">
                         ${filterBar}
                     </div>
