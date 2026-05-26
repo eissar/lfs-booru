@@ -36,6 +36,38 @@ function renderFilterBar(keyword: string | false, tag: string): string {
 }
 
 /**
+ * Renders the reserved-width inspector sidebar shell.
+ *
+ * The outer `<aside>` owns the animated width so it reserves layout space when
+ * open. The inner panel keeps a stable width and flex-column child layout so
+ * header/footer controls do not squeeze while the sidebar opens or closes.
+ *
+ * @returns Inspector sidebar shell HTML fragment.
+ */
+function renderInspectorShell(): string {
+    return html`
+        <aside id="inspector" class="inspector shrink-0 overflow-hidden transition-[width] duration-150 ease-in-out">
+            <div class="inspector-inner flex h-full flex-col">
+                <header class="inspector-header shrink-0">
+                    <div class="min-w-0">
+                        <h2 class="truncate text-sm font-semibold">Inspector</h2>
+                        <p class="text-xs" style="color: var(--text-muted);">Image details</p>
+                    </div>
+                    <button
+                        type="button"
+                        class="inspector-close rounded px-2 py-1 text-sm font-medium hover-surface"
+                        onclick="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
+                    >×</button>
+                </header>
+                <div id="inspector-content" class="inspector-body min-h-0 flex-1 overflow-y-auto">
+                    <p class="text-sm" style="color: var(--text-muted);">Select an image to inspect it.</p>
+                </div>
+            </div>
+        </aside>
+    `;
+}
+
+/**
  * Renders the main gallery HTML page.
  *
  * @param title - The page title.
@@ -122,6 +154,7 @@ export default function gallery(
                                         name="q"
                                         placeholder="Search..."
                                         class="block w-full border border-transparent rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-transparent input-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 focus-visible:border-transparent"
+                                        required
                                     >
                                     ${hiddenTagInputs}
                                     <button
@@ -195,6 +228,21 @@ export default function gallery(
                                         >
                                     </button>
                                 </div>
+                                <div class="relative inline-block">
+                                    <button
+                                        id="inspector-toggle"
+                                        type="button"
+                                        class="p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface"
+                                        onclick="document.getElementById('gallery-main')?.classList.toggle('inspector-open')"
+                                    >
+                                        <img
+                                            src="https://unpkg.com/heroicons@2.0.18/24/outline/information-circle.svg"
+                                            class="h-5 w-5"
+                                            style="filter: var(--icon-filter);"
+                                            alt="Inspector"
+                                        >
+                                    </button>
+                                </div>
                             <div class="relative inline-block">
                                 <details class="relative" name="header">
                                     <summary
@@ -257,25 +305,28 @@ export default function gallery(
                         </div>
                     </div>
                 </header>
-                <main class="max-w-screen-2xl mx-auto p-5 sm:p-6 lg:p-8 main-scroll">
-                    <div id="filter-bar">
-                        ${filterBar}
-                    </div>
-                    <div class="layout">
-                        <section class="main-content">
-                            <div id="photo-grid" class="masonry-grid">
-                                <div
-                                    hx-get="/fragment/items"
-                                    hx-trigger="load"
-                                    hx-target="#photo-grid"
-                                    hx-swap="outerHTML"
-                                    hx-include="#filter-bar,#preferences,#pagination-controls"
-                                >
-                                    Loading initial content...
+                <main id="gallery-main" class="gallery-main main-scroll">
+                    <div class="gallery-content">
+                        <div id="filter-bar">
+                            ${filterBar}
+                        </div>
+                        <div id="gallery-layout" class="layout">
+                            <section class="main-content">
+                                <div id="photo-grid" class="masonry-grid">
+                                    <div
+                                        hx-get="/fragment/items"
+                                        hx-trigger="load"
+                                        hx-target="#photo-grid"
+                                        hx-swap="outerHTML"
+                                        hx-include="#filter-bar,#preferences,#pagination-controls"
+                                    >
+                                        Loading initial content...
+                                    </div>
                                 </div>
-                            </div>
-                        </section>
+                            </section>
+                        </div>
                     </div>
+                    ${renderInspectorShell()}
                 </main>
             </body>
         </html>

@@ -294,33 +294,94 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
     column-span: all;
 }
 
+.gallery-main {
+    --inspector-width: min(24rem, 42vw);
+
+    display: flex;
+    width: 100vw;
+    max-width: none;
+    height: calc(100vh - 4rem);
+    overflow: hidden;
+}
+
+.gallery-content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    padding: 1.25rem;
+    overflow: hidden;
+}
+
+@media (width >= 640px) {
+    .gallery-content {
+        padding: 1.5rem;
+    }
+}
+
+@media (width >= 1024px) {
+    .gallery-content {
+        padding: 2rem;
+    }
+}
+
 .layout {
     display: flex;
+    flex: 1 1 auto;
     width: 100%;
-    height: calc(100vh - 6rem);
-}
-
-/* Inspector panel */
-.inspector {
-    width: 320px;
-    min-width: 320px;
-    border-left: 1px solid var(--border-color-light);
-    overflow-y: auto;
-    height: calc(100vh - 6rem);
-}
-
-/* Hidden state */
-.inspector.hidden {
-    display: none;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Main content area */
 .main-content {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: auto;
 }
 
+/* Inspector panel */
+.inspector {
+    flex: 0 0 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    background-color: var(--bg-surface);
+    border-left: 0 solid var(--border-color-light);
+    overflow: hidden;
+    transition: width 150ms ease-in-out, border-left-width 150ms ease-in-out;
+}
+
+.gallery-main.inspector-open .inspector {
+    width: var(--inspector-width);
+    border-left-width: 1px;
+}
+
+.inspector-inner {
+    width: var(--inspector-width);
+    height: 100%;
+    background-color: var(--bg-surface);
+}
+
+.inspector-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.inspector-body {
+    padding: 1rem;
+}
+
+.inspector-close {
+    color: var(--text-primary);
+}
+
 .main-scroll {
-    overflow-y: auto;
+    overflow: hidden;
     scrollbar-gutter: stable both-edges;
 }
