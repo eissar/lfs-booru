@@ -4,10 +4,18 @@ import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 import { isInt } from '@/util.ts';
 
+type ItemSortField = 'id'; // | 'date';
+type ItemSortDirection = -1 | 1;
+export type ItemSort = {
+    field: ItemSortField;
+    direction: ItemSortDirection;
+};
+
 export type ItemsFilter = {
     limit: number;
     tags?: string[];
     offset?: number;
+    sort?: ItemSort;
 };
 
 // TODO:
@@ -262,7 +270,9 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         this.cursorCache = nextCursor;
     }
 
-    async *listItems(options: ItemsFilter): AsyncIterable<[string, ImageState]> {
+    async *listItems(
+        options: ItemsFilter,
+    ): AsyncIterable<[string, ImageState]> {
         let entries: ImageStateIndex;
 
         {
@@ -278,9 +288,17 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         let skipped = 0;
         let yielded = 0;
 
-        for (const id in entries) {
-            const imageState = entries[id];
+        const sort = options.sort ?? { field: 'id', direction: -1 };
 
+        const sortedEntries = Object.entries(entries).sort(([a], [b]) => {
+            if (sort.field === 'id') {
+                return (Number(a) - Number(b)) * sort.direction;
+            }
+
+            return 0;
+        });
+
+        for (const [id, imageState] of sortedEntries) {
             if (options.tags && options.tags.length > 0) {
                 const matches = options.tags.some((t) => imageState.tags.includes(t));
                 if (!matches) continue;
