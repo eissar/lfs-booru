@@ -1,7 +1,7 @@
 import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
 import { ItemsFilter } from '@/index_store.ts';
-import { itemFilterToSearchParams } from '../../server.ts';
+import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 
 function renderHiddenInput(name: string, value: string): string {
     return html`
@@ -125,6 +125,13 @@ export default function gallery(
             return html`<option value="${String(limit)}"${selected}>${String(limit)}</option>`;
         }).join('\n');
 
+    const sortOptions = Object.entries(itemSortParameterMap)
+        .map(([parameter, sort]) => {
+            let selected = '';
+            if (sort.field === search.sort?.field && sort.direction === search.sort.direction) selected = ' selected';
+            return html`<option value="${escape(parameter)}"${selected}>${escape(parameter)}</option>`;
+        }).join('\n');
+
     return html`
         <!DOCTYPE html>
         <html lang="en">
@@ -231,6 +238,16 @@ export default function gallery(
                                                     class="block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                                 >
                                                     ${pageSizeOptions}
+                                                </select>
+                                                <label class="block text-sm font-medium" for="sort-input">
+                                                    Sort
+                                                </label>
+                                                <select
+                                                    id="sort-input"
+                                                    name="sort"
+                                                    class="block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                >
+                                                    ${sortOptions}
                                                 </select>
                                                 <button
                                                     type="submit"
