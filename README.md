@@ -1,44 +1,22 @@
-This document describes a **Git-native booru-style image gallery** architecture that treats the system as an append-only content archive with derived search/index artifacts and incremental static rendering. The core philosophy separates authoritative Git history from disposable materialized views.
+# LFS Booru
 
-Key architectural components:
-- **Append-only NDJSON event logs** for metadata (add/tag/delete operations)
-- **Git LFS** for immutable binary storage
-- **Incremental indexer** that processes only new events via post-receive hooks
-- **Incremental static renderer** that updates only affected pages
-- **Git scaling optimizations**: partial clone, sparse checkout, lazy hydration
+This project is a Git-based booru-style image gallery. It stores metadata as append-only NDJSON event logs, stores image bytes with Git LFS, and builds search/index and static-rendering artifacts from those logs.
 
-The system avoids traditional mutable database patterns and per-file metadata, instead using event sourcing semantics for deterministic rebuilds and minimal Git churn. The architecture supports scaling from small personal galleries (~10k images with JSON indexes) to large-scale deployments (~1M+ images with optimized indexes) while maintaining Git-native workflows and reproducibility.
+## Architecture overview
 
-The architecture supports a Git workflow with post-receive hooks that process new events, update indices from all metadata, and trigger incremental static site generation. The indexer uses `git diff` to find appended NDJSON segments and compute only the necessary updates to materialized views.
+Core components:
 
-Core Philosophy
+- **Append-only NDJSON event logs** for metadata operations such as add, tag, and delete
+- **Git LFS** for binary image storage
+- **Incremental indexer** that processes new events from post-receive hooks or local watchers
+- **Incremental static renderer** that updates affected pages
+- **Git scaling options** such as partial clone, sparse checkout, and lazy LFS hydration
 
-Treat the system as:
+Git history is the source of truth. Indexes and rendered pages are derived artifacts that can be rebuilt from the event logs.
 
-append-only content archive
-+
-derived search/index artifacts
-+
-incremental static renderer
+## Repository layout
 
-—not as:
-
-a traditional mutable database app
-nor “millions of files in Git”
-
-The key architectural insight is:
-
-Git stores authoritative history.
-Indexes are disposable materialized views.
-
-That separation simplifies nearly everything.
-
-
-the log is canonical
-indexes are disposable caches
-
-
-Repository Layout
+```text
 repo/
   events/
     2026-05.ndjson
@@ -53,308 +31,216 @@ repo/
 
   generated/
     static html output (optional)
+```
 
-Important points:
+Notes:
 
-metadata is append-only NDJSON
-binaries are immutable-ish
-avoid per-image metadata files
-avoid giant mutable manifests
+- Metadata is stored as append-only NDJSON
+- Image binaries are treated as immutable once written
+- Per-image metadata files are avoided
+- Large mutable manifests are avoided
 
-This dramatically reduces:
+This layout reduces Git tree churn, object count growth, and packfile fragmentation compared with per-image metadata files.
 
-Git tree churn
-object count explosion
-packfile fragmentation
-Metadata Model
+## Metadata model
 
-Use an append-only event log:
+Metadata is represented as an append-only event log:
 
+```json
 {"op":"add","id":123,"tags":["cat","night"]}
 {"op":"tag_add","id":123,"tag":"outdoor"}
 {"op":"tag_remove","id":123,"tag":"night"}
 {"op":"delete","id":98}
+```
 
-Benefits:
+The NDJSON log is the authoritative source of truth. Indexes, counts, rendered pages, and other materialized outputs are derived state.
 
-incremental indexing becomes trivial
-replayability
-deterministic rebuilds
-Git-friendly append patterns
-temporal sharding
-compact diffs
-event sourcing semantics
+This model supports:
 
-The NDJSON log becomes:
+- Incremental indexing
+- Deterministic rebuilds
+- Compact append-oriented diffs
+- Temporal sharding
 
-the authoritative source of truth
+## Incremental indexer
 
-Everything else becomes derived state.
+A post-receive hook or local watcher compares commits:
 
-Incremental Indexer
-
-A post-receive hook or local watcher:
-
+```sh
 git diff previous_commit current_commit
+```
 
-finds:
+The indexer detects:
 
-appended NDJSON segments
-changed thumbnails
-new binaries
+- Appended NDJSON segments
+- Changed thumbnails
+- New binaries
 
-The indexer:
+It then:
 
-reads only new events
-computes tag deltas
-updates materialized indexes
-rerenders affected pages only
+- Reads new events
+- Computes tag deltas
+- Updates materialized indexes
+- Rerenders affected pages
 
-No global rebuilds.
+Initial index files may include:
 
-Index Storage:
+- `tag_index.json`
+- `image_state.json`
+- `counts.json`
 
-Start with:
-- tag_index.json
-- image_state.json
-- counts.json
-
-simplest possible implementation
-easy debugging, no external dependency
-perfectly adequate for small/personal galleries
-
-event log + disposable index means decoupling;
-index storage layer is easily swappable for sqlite/bbolt, whatever
+The index storage layer can later be replaced with SQLite, Bbolt, or another storage engine.
 
 ## Scaling
-Recommended Scaling Path
-Small Scale (~10k images)
+
+### Small scale, around 10k images
 
 Use:
 
-JSON indexes
-append-only NDJSON
-static generation
+- JSON indexes
+- Append-only NDJSON logs
+- Static generation
 
-No database needed.
+### Medium scale, around 100k images
 
-Medium Scale (~100k images)
+Consider moving indexes to:
 
-Move indexes to:
+- SQLite
+- Bbolt
 
-SQLite
-or Bbolt
+Additional work may include:
 
-Add:
+- Incremental materialized counts
+- Cached implication closures
+- Selective rerendering
 
-incremental materialized counts
-cached implication closures
-selective rerendering
+### Large scale, around 1M+ images
 
-Still very manageable.
+Possible additions:
 
-Large Scale (~1M+ images)
+- Roaring bitmap posting lists
+- Compressed inverted indexes
+- Parallel static generation
+- Thumbnail caching
 
-Add:
+At this size, query performance, index structure, Git object counts, and repository maintenance need closer attention.
 
-roaring bitmap posting lists
-compressed inverted indexes
-parallel static generation
-aggressive thumbnail caching
+## Git scaling strategy
 
-At this point:
+### 1. Append-only metadata
 
-query performance matters
-index structure matters
-Git object counts begin mattering more
+Segmented NDJSON logs avoid millions of mutable metadata files.
 
-But still feasible.
+### 2. Partial clone
 
-
-Git Scaling Strategy
-
-The important optimization stack is:
-
-1. Append-only metadata
-
-Most important metadata optimization.
-
-Avoid:
-
-millions of mutable tiny files
-
-Prefer:
-
-segmented NDJSON logs
-2. Partial clone
+```sh
 git clone --filter=blob:none
+```
 
-Downloads:
+This downloads commits, trees, and path metadata without downloading blob contents immediately.
 
-commits
-trees
-path metadata
+### 3. Sparse checkout
 
-but not blob contents initially.
-
-Huge bandwidth savings.
-
-3. Sparse checkout
+```sh
 git sparse-checkout set recent/
+```
 
-Reduces:
+Sparse checkout reduces working tree size, hydration cost, editor load, and local filesystem pressure.
 
-working tree size
-hydration cost
-editor load
-local filesystem pressure
+Sparse checkout does not remove global Git metadata costs. Git still tracks trees, commits, and path metadata for the repository.
 
-Important clarification:
+### 4. Git LFS lazy hydration
 
-Sparse checkout does NOT solve Git metadata scaling.
-It only solves working-tree scaling.
+```sh
+GIT_LFS_SKIP_SMUDGE=1
+```
 
-Git still tracks:
+This avoids hydrating LFS objects during checkout. Binaries are fetched when needed.
 
-trees
-commits
-path metadata
+## Rendering model
 
-globally.
+Static pages are derived artifacts. The renderer updates only affected outputs, such as:
 
-4. Git LFS lazy hydration
+- Touched tag pages
+- Affected pagination pages
+- Image detail pages
+- Derived feeds
 
-Use: GIT_LFS_SKIP_SMUDGE=1
-so binaries hydrate from lfs-server only when needed.
+## Operational considerations
 
-
-
-Rendering Model
-
-Static pages are derived artifacts.
-
-Incremental renderer updates only:
-
-touched tag pages
-affected pagination pages
-image detail pages
-derived feeds
-
-Avoid:
-
-full static rebuilds
-What Actually Becomes Difficult
-
-The indexing system is not the hardest part.
-
-The hard parts at very large scale become:
+At larger repository sizes, the main operational concerns are:
 
 - Git object counts
-- filesystem inode pressure
-- thumbnail generation
-- deploy bandwidth
-- repository maintenance
+- Filesystem inode pressure
+- Thumbnail generation
+- Deploy bandwidth
+- Repository maintenance
 - LFS storage size
 
-The NDJSON/event-log architecture largely solves:
+The event-log model is intended to reduce metadata churn and make incremental indexing explicit.
 
-metadata churn
-incremental indexing complexity
+## HTTP ingest caveat
 
-which are the traditional booru pain points.
-
-Final Architectural Summary
-
-The recommended architecture is essentially:
-
-Git:
-  authoritative append-only event history
-
-Git LFS:
-  immutable binary storage
-
-Indexer:
-  incremental event consumer
-
-Derived indexes:
-  JSON initially
-  SQLite/Bbolt later if needed
-
-Renderer:
-  incremental static site generator
-
-Client:
-  sparse checkout + partial clone + lazy hydration
-
-That gives you:
-
-git-native workflows
-reproducibility
-rebuildability
-incremental updates
-scalable indexing
-optional backend sophistication
-minimal operational complexity
-
-while staying surprisingly lightweight for personal or archival-scale usage.
-
-
-## HTTP Ingest Caveat
-
-The `POST /ingest` endpoint uploads image bytes directly to the LFS server via the Batch API, writes the pointer file to `images/{id}.png`, appends an NDJSON event, and synchronously creates a git commit containing both files.
+The `POST /ingest` endpoint uploads image bytes directly to the LFS server through the Batch API, writes the pointer file to `images/{id}.png`, appends an NDJSON event, and synchronously creates a Git commit containing both files.
 
 This means:
+
 - The binary exists on the LFS server at its OID
 - The pointer file and NDJSON event are staged with `git add -- images/{id}.png events/2026-05.ndjson`
-- A successful ingest returns only after `git commit` succeeds; `git add` or `git commit` failures are returned as JSON HTTP errors
+- A successful ingest returns only after `git commit` succeeds
+- `git add` or `git commit` failures are returned as JSON HTTP errors
 
-## Image Filename & ID Convention
+## Image filename and ID convention
 
-Images on disk use **sequential numeric IDs** as filenames:
+Images on disk use sequential numeric IDs as filenames:
 
-```
+```text
 images/1.png
 images/2.png
 images/3.png
 ```
 
-The numeric ID serves as both the filename and the `id` field in NDJSON events. This was chosen over alternatives:
+The numeric ID is both the filename and the `id` field in NDJSON events.
 
-**OID-as-filename** (`images/907415...fea.png`):
-- Content-addressed, no collisions, self-validating
-- But: ugly long hex strings, filename changes if image is re-encoded
+Alternatives considered:
 
-**UUID-as-filename** (`images/a1b2c3d4-...png`):
-- Stable, no semantic meaning
-- But: adds a generation step, opaque, no ordering
+**OID as filename**: `images/907415...fea.png`
 
-**Sequential numeric ID** (`images/1.png`):
-- Clean, human-friendly, standard booru convention
-- The ID in the event log IS the filename — no indirection
-- Trivial to track: read max ID from the index, increment
-- The OID remains a separate field used only for LFS blob retrieval
+- Content-addressed
+- Collision-resistant
+- Changes if the image is re-encoded
+- Produces long filenames
 
-The philosophy: the event log is authoritative. The filename on disk is just a storage key — it carries no semantic weight. The simplest key is an integer.
+**UUID as filename**: `images/a1b2c3d4-...png`
 
-The current design is pragmatic because the measurements show that ingestion cost is dominated by a stable, fixed overhead (~55-65ms per operation) coming primarily from process spawn and Git's index mutation, rather than any scaling factor related to repository size or NDJSON shard growth. This makes the system behavior predictable and operationally simple in the near term: throughput is bounded by a constant per-request cost rather than emergent complexity from large histories or large working trees. The benchmark results supporting this are documented here: https://github.com/eissar/git-performance-benchmarking/blob/main/bench.ts, where git add and update-index stabilize around ~63-64ms across varying repository sizes, with negligible file-read cost and no observed scaling degradation in the tested regime.
+- Stable
+- Does not require sequential allocation
+- Adds a generation step
+- Does not provide ordering
 
-In the longer term, however, Git is intentionally being treated as a durability and history substrate rather than a synchronous ingestion dependency, and it will be decoupled from the ingest path once higher throughput or concurrency demands emerge. At that point, ingestion will shift to an asynchronous append-first pipeline while Git becomes a batched, background persistence layer, preserving the event-sourced model while removing Git from the critical request path.
+**Sequential numeric ID**: `images/1.png`
 
+- Matches common booru conventions
+- Uses the same value in the filename and event log
+- Can be allocated by reading the current maximum ID and incrementing
+- Keeps the LFS OID as separate blob-retrieval metadata
 
-Future considerations:
+The filename is a storage key. Semantic metadata belongs in the event log.
 
-Query Architecture
+## Current ingest performance assumption
 
-Indexes become classic inverted indexes: tag -> posting list of image ids
+Current measurements indicate that ingestion cost is dominated by fixed overhead, mostly process spawning and Git index mutation. In the measured regime, `git add` and `update-index` stabilize around 63-64ms across varying repository sizes, with negligible file-read cost and no observed scaling degradation.
 
-Initially:
-sorted integer arrays are fine
+Benchmark reference: https://github.com/eissar/git-performance-benchmarking/blob/main/bench.ts
 
-Later:
-use roaring bitmaps
-compressed posting lists
+For higher throughput or concurrency requirements, Git can be moved out of the synchronous ingest path. In that model, ingestion would append first, and Git commits would be created by a batched background persistence process.
 
-for fast:
-intersection, exclusion, counts
+## Future query architecture
 
-This is where Bbolt/SQLite become useful.
+Indexes can use an inverted-index structure:
+
+```text
+tag -> posting list of image ids
+```
+
+Initial implementations can use sorted integer arrays. Later implementations may use roaring bitmaps or compressed posting lists for intersection, exclusion, and count queries.
