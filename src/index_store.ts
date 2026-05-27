@@ -237,7 +237,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         using _lock = await this.mu.acquire();
         const statePath = join(this.conn.path, 'index', 'image_state.json');
 
-        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        const imageState = await readJsonFile<ImageStateIndex>(statePath);
         return imageState[id] ?? null;
     }
 
@@ -246,7 +246,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         // const cursorPath = join(this.conn.path, 'event_cursor');
 
-        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        const imageState = await readJsonFile<ImageStateIndex>(statePath);
 
         for (const [id, image] of Object.entries(imageState)) {
             if (image.oid === oid) return id;
@@ -264,8 +264,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
         const cursorPath = join(this.conn.path, 'event_cursor');
 
-        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+        const imageState = await readJsonFile<ImageStateIndex>(statePath);
+        const tagIndex = await readJsonFile<TagIndex>(indexPath);
         applyEventToIndexState(imageState, tagIndex, event);
 
         if (event.op === 'add') {
@@ -325,8 +325,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
         const cursorPath = join(this.conn.path, 'event_cursor');
 
-        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+        const imageState = await readJsonFile<ImageStateIndex>(statePath);
+        const tagIndex = await readJsonFile<TagIndex>(indexPath);
 
         const encoder = new TextEncoder();
         let byteOffset = previousOffset;
@@ -388,7 +388,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         {
             using _lock = await this.mu.acquire();
             const statePath = join(this.conn.path, 'index', 'image_state.json');
-            entries = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+            entries = await readJsonFile<ImageStateIndex>(statePath);
         }
 
         const limit = options.limit ?? Infinity;
@@ -451,7 +451,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         {
             using _lock = await this.mu.acquire();
             const statePath = join(this.conn.path, 'index', 'image_state.json');
-            const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+            const imageState = await readJsonFile<ImageStateIndex>(statePath);
             entries = Object.entries(imageState);
         }
         const limit = options.limit ?? Infinity;
@@ -473,8 +473,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
 
-        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
-        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+        const imageState = await readJsonFile<ImageStateIndex>(statePath);
+        const tagIndex = await readJsonFile<TagIndex>(indexPath);
 
         return {
             images: Object.keys(imageState).length,
@@ -513,13 +513,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
     }
 }
 
-async function readJsonFile<T>(path: string, fallback: () => T): Promise<T> {
-    try {
-        return JSON.parse(await Deno.readTextFile(path)) as T;
-    } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return fallback();
-        throw error;
-    }
+async function readJsonFile<T>(path: string): Promise<T> {
+    return JSON.parse(await Deno.readTextFile(path)) as T;
 }
 
 async function writeJsonFile(path: string, value: unknown): Promise<void> {
