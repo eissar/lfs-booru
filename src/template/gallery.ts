@@ -114,13 +114,16 @@ export default function gallery(
         .join('\n') ?? '';
 
     // TODO: ItemsFilter.keyword
-    const filterBar = renderFilterBar(search)
+    const filterBar = renderFilterBar(search).join('\n');
 
     // migrate any selected value from preferences to filterbar?
     const pageSizeOptions = [...new Set([10, 25, 50, 100, search.limit])]
         .sort((a, b) => a - b)
-        .map((limit) => html`<option value="${String(limit)}"${limit === search.limit && ' selected'}>${String(limit)}</option>`)
-        .join('\n');
+        .map((limit) => {
+            let selected = '';
+            if (limit === search.limit) selected = ' selected';
+            return html`<option value="${String(limit)}"${selected}>${String(limit)}</option>`;
+        }).join('\n');
 
     return html`
         <!DOCTYPE html>
