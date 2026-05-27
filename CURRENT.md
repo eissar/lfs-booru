@@ -74,7 +74,7 @@ src/
   template/
     index.ts                       Exports template functions: Gallery, ImageCard, photoGrid
     gallery.ts                     Full gallery page HTML template (HTMX, Tailwind CSS, dark mode)
-    image-card.ts                  Image card fragment HTML template
+    item-card.ts                   Item card fragment HTML template
     photo-grid_fragment.ts         Photo grid masonry fragment HTML template
 static/
   gallery.css                      Gallery stylesheet: light/dark theme, masonry grid, component classes
@@ -160,7 +160,7 @@ URL helpers use `/{user}/{repo}/objects` when either user or repo is non-empty, 
 ### Templates (`src/template/`)
 
 - `gallery.ts`: Full gallery page with HTMX (`htmx.org@2.0.4`), Tailwind CSS (CDN), dark mode toggle, search input, and upload form with drag-and-drop support.
-- `image-card.ts`: Renders an image card with linked thumbnail (`/image/{oid}`), escaped name, dimensions, and tag links.
+- `item-card.ts`: Renders an item card with linked thumbnail (`/image/{oid}`), escaped name, dimensions, and tag links.
 - `photo-grid_fragment.ts`: Renders a `<div id="photo-grid">` with masonry grid class for HTMX fragment replacement.
 
 ### Static files (`static/gallery.css`)

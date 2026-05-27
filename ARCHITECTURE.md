@@ -110,7 +110,7 @@ Git operations are localized to `Init` and `stageAndCommit`. `Init` handles clon
 There are two rendering layers:
 
 - `CachingHtmlRenderer` implements `HtmlRenderer`. It renders individual image cards (uncached), gallery pages (cached by content hash under `index/artifacts/gallery-pages`), and photo grid fragments (uncached).
-- Template functions in `src/template/` (`gallery.ts`, `image-card.ts`, `photo-grid_fragment.ts`) produce escaped HTML strings.
+- Template functions in `src/template/` (`gallery.ts`, `item-card.ts`, `photo-grid_fragment.ts`) produce escaped HTML strings.
 
 The server handler uses the renderer for all gallery requests. Image cards include tag links pointing to `/gallery?tags=...` for filtered navigation. The gallery page renders an HTMX shell that lazy-loads items from `/fragment/items`.
 

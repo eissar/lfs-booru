@@ -1,5 +1,5 @@
 import gallery from '@/template/gallery.ts';
-import imageCard from '@/template/image-card.ts';
+import itemCard from '@/template/item-card.ts';
 import photoGrid from '@/template/photo-grid_fragment.ts';
 import inspector from '@/template/inspector_fragment.ts';
 
@@ -8,7 +8,7 @@ export const template = {
         Gallery: gallery,
     },
     fragment: {
-        ImageCard: imageCard,
+        ImageCard: itemCard,
         photoGrid: photoGrid,
         inspector: inspector,
     },

@@ -3,13 +3,13 @@ import { html } from '@/html.ts';
 import type { GalleryImage } from '@/renderer.ts';
 
 /**
- * Renders an image card fragment.
+ * Renders an item card fragment.
  *
  * @param image Image record to render.
  * @param tags Pre-rendered tag link fragments.
- * @returns The image card HTML fragment string.
+ * @returns The item card HTML fragment string.
  */
-export default function imageCard(image: GalleryImage, tags: string): string {
+export default function itemCard(image: GalleryImage, tags: string): string {
     const imageSrc = `/image/${image.oid}`; // oid doesn't need escape
     const imageInspect = `/fragment/inspect/${image.oid}`;
     const imageName = escape(image.name);
