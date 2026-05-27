@@ -6,7 +6,7 @@ import { getFlags } from '@/cli.ts';
 import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
-import { DerivedIndexStore, ItemsFilter, JsonFileIndexStore } from '@/index_store.ts';
+import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
 import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
@@ -42,6 +42,55 @@ function parseSearchQuery(query: string): URLSearchParams {
     return params;
 }
 
+export const itemSortParameterMap: Record<string, ItemSort> = {
+    'idAsc': { field: 'id', direction: 1 },
+    'idDesc': { field: 'id', direction: -1 },
+    'addedAtAsc': { field: 'addedAt', direction: 1 },
+    'addedAtDesc': { field: 'addedAt', direction: -1 },
+};
+
+/**
+ * Convert an item filter to URL search parameters.
+ *
+ * @param filter Item listing filter to serialize.
+ * @param sortParameterMap Mapping from URL sort parameter values to item sort definitions.
+ * @returns URL search parameters representing the filter.
+ */
+export function itemFilterToSearchParams(
+    filter: ItemsFilter,
+    sortParameterMap: Record<string, ItemSort> = itemSortParameterMap,
+): URLSearchParams {
+    const params = new URLSearchParams();
+
+    params.set('limit', String(filter.limit));
+
+    for (const tag of filter.tags ?? []) {
+        params.append('tags', tag);
+    }
+
+    if (filter.offset !== undefined) {
+        params.set('offset', String(filter.offset));
+    }
+
+    if (filter.sort !== undefined) {
+        const sortParameter = Object.entries(sortParameterMap).find(([, sort]) => {
+            return sort.field === filter.sort?.field && sort.direction === filter.sort.direction;
+        })?.[0];
+
+        if (sortParameter === undefined) {
+            throw new Error(
+                `Cannot serialize item sort: current sort is ${
+                    JSON.stringify(filter.sort)
+                }, desired sort must exist in sort parameter map`,
+            );
+        }
+
+        params.set('sort', sortParameter);
+    }
+
+    return params;
+}
+
 async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRenderer): Promise<void | Response> {
     // search
     if (url.pathname === '/gallery' && url.searchParams.has('q')) {
@@ -61,9 +110,14 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             .map((tag) => tag.trim())
             .filter((tag) => tag.length > 0);
 
+        let sort: ItemSort = itemSortParameterMap['idDesc'];
+        if (url.searchParams.has('sort')) {
+            const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
+            if (match !== undefined) sort = match;
+        }
         return c.html(
             await render.renderGalleryPage({
-                filter: { limit, tags },
+                filter: { limit, tags, sort },
                 title: 'Gallery',
             }),
         );
@@ -84,9 +138,17 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             .map((tag) => tag.trim())
             .filter((tag) => tag.length > 0);
 
+        // default to idDesc
+        let sort: ItemSort = itemSortParameterMap['idDesc'];
+        if (url.searchParams.has('sort')) {
+            const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
+            if (match !== undefined) sort = match;
+        }
+
         const opts: ItemsFilter = {
             limit,
             tags,
+            sort,
         };
         if (offset) opts.offset = offset;
 

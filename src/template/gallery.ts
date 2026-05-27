@@ -1,7 +1,7 @@
 import { escape } from '@std/html/entities';
 import { html } from '@/html.ts';
 import { ItemsFilter } from '@/index_store.ts';
-import { debug } from '../logging.ts';
+import { itemFilterToSearchParams } from '../../server.ts';
 
 function renderHiddenInput(name: string, value: string): string {
     return html`
@@ -9,30 +9,57 @@ function renderHiddenInput(name: string, value: string): string {
     `;
 }
 
-function renderFilterBar(keyword: string | false, tag: string): string {
-    const params = new URLSearchParams();
-    if (keyword) params.set('keyword', keyword);
+// TODO: should incl limit, offset as chips?
+//
+// if returns false we don't render this
+function renderFilterChipDisplayText(k: string, v: string): string|false {
+    if (k === "tags") {
+        return escape(v)
+    }
+    if (k === "sort") { // e.g., sort: idDesc
+        return escape(`${k}: ${v}`)
+    }
+    return false
+}
 
-    const query = params.toString();
-    const removeUrl = query ? `/gallery?${query}` : '/gallery';
-    const fragmentUrl = query ? `/fragment/items?${query}` : '/fragment/items';
-    const escapedTag = escape(tag);
-    debug('RENDER');
-    debug(escapedTag);
+function renderFilterBar(f: ItemsFilter): string[] {
+    const params = itemFilterToSearchParams(f);
 
-    return html`
-        <span class="filter-chip text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">
-            <input type="hidden" name="tags" value="${escapedTag}">
-            <a
-                href="${escape(removeUrl)}"
-                hx-get="${escape(fragmentUrl)}"
-                hx-target="#photo-grid"
-                hx-swap="outerHTML"
-                hx-push-url="${escape(removeUrl)}"
-                hx-on::after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
-            >#${escapedTag}×</a>
-        </span>
-    `;
+    const entries: [string, string][] = [...params];
+
+    const chips: string[] = [];
+    for (let i = 0; i < entries.length; i++) {
+        const [exclKey, exclVal] = entries[i];
+
+        const escapedDisplayText = renderFilterChipDisplayText(exclKey, exclVal)
+        if (!escapedDisplayText) continue // non-renderable filter
+
+        params.delete(exclKey, exclVal);
+
+        // query with the excluded parameter
+        const query = params.toString()
+
+        const removeUrl = query ? `/gallery?${query}` : '/gallery';
+        const fragmentUrl = query ? `/fragment/items?${query}` : '/fragment/items';
+
+        chips.push(html`
+            <span class="filter-chip text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">
+                <input type="hidden" name="${escape(exclKey)}" value="${escape(exclVal)}">
+                <a
+                    href="${escape(removeUrl)}"
+                    hx-get="${escape(fragmentUrl)}"
+                    hx-target="#photo-grid"
+                    hx-swap="outerHTML"
+                    hx-push-url="${escape(removeUrl)}"
+                    hx-on::after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
+                >#${escapedDisplayText}×</a>
+            </span>
+        `);
+
+        // does not preserve ordering
+        params.append(exclKey, exclVal);
+    }
+    return chips;
 }
 
 /**
@@ -87,10 +114,9 @@ export default function gallery(
         .join('\n') ?? '';
 
     // TODO: ItemsFilter.keyword
-    const filterBar: string = search?.tags
-        ?.map((tag) => renderFilterBar(false, tag))
-        .join('\n') ?? '';
+    const filterBar = renderFilterBar(search)
 
+    // migrate any selected value from preferences to filterbar?
     const pageSizeOptions = [...new Set([10, 25, 50, 100, search.limit])]
         .sort((a, b) => a - b)
         .map((limit) => html`<option value="${String(limit)}"${limit === search.limit && ' selected'}>${String(limit)}</option>`)
