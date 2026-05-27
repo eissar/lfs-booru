@@ -73,3 +73,18 @@ when failing to clone new library
  possible:
  important demarcation lines:
  indexer
+
+Pointer file failure handling options
+- Best option: write pointer content to a temp file outside the library worktree during ingest preparation, then move/copy it to images/{id}.png only inside the event append + Git commit protected section. Delete the temp file on failure.
+- Good option: generate/write images/{id}.png inside the rollback-protected commit section, then delete that pointer file if Git staging or commit fails.
+- Weakest option: keep current early pointer write behavior, but add best-effort purge of images/{id}.png after failed Git commit. This is less robust because crashes can still leave uncommitted pointer files behind.
+- Preferred goal: avoid leaving uncommitted pointer files in the library worktree after failed ingest. ID gaps are acceptable; dirty worktree artifacts are not.
+
+Git index rollback options
+- Do not use `git reset --hard` as normal ingest rollback. It is too broad and can destroy unrelated local work in the library repository.
+- Preferred rollback: stage only ingest-owned paths, then on staging/commit failure run targeted unstaging for those paths, e.g. `git reset -- images/{id}.png events/{shard}.ndjson` or `git restore --staged ...` where supported.
+- Let `appendWithRollback` own event shard truncation. Do not blindly restore or delete the event shard outside the event-log rollback logic.
+- Delete only ingest-created pointer files during rollback. Avoid touching unrelated working-tree files.
+- Add a pre-ingest Git cleanliness check, at least `git diff --cached --quiet`, and fail fast if the library repository already has staged changes.
+- Optional stricter precondition: require a fully clean worktree before ingest if manual edits are not supported in library repositories.
+- Commit-protected flow should be: place/write pointer file, stage pointer + event shard, commit, and on failure targeted-unstage touched paths plus remove ingest-created pointer file.

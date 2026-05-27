@@ -34,7 +34,7 @@ Image bytes are authoritative in the Git LFS object store. The repository stores
 
 `event_cursor` is replay bookkeeping. It records the last processed event position but is not a source of truth — the JSON store loads it from disk when the in-memory cache is empty, and replay correctness depends on the event log, not the cursor.
 
-`index/next_image_id` is a write-path sequence file. It is initialized during `initializeEmptyIndex` and advanced before an ingest event is committed. `processEvents` reconciles `next_image_id` from committed add-event IDs via `applyEvent`, so ID allocation depends on both mutable local state and committed event IDs.
+`index/next_image_id` is a write-path allocation file for monotonically increasing, non-contiguous image IDs. It is initialized during `initializeEmptyIndex` and advanced before an ingest event is committed. `processEvents` reconciles `next_image_id` from committed add-event IDs via `applyEvent`, so ID allocation depends on both mutable local state and committed event IDs. Gaps from failed or abandoned ingest attempts are expected and are not a correctness problem.
 
 ## Git and Git LFS Responsibilities
 
@@ -93,7 +93,7 @@ Replay uses `readEvents`, but `processEvents` still checks for the concrete `Ndj
 
 `DerivedIndexStore` is the storage contract for replay, gallery reads, ID allocation, and post-ingest materialization. `JsonFileIndexStore` implements the contract with JSON files and process-local mutexes.
 
-Replay calls `store.applyEvent` instead of writing files itself. `applyEvent` also reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a consistent write-path sequence. Gallery rendering calls `store.listItems` with optional tag filtering. Ingest calls `store.allocateImageId`, then later calls `store.applyEvent` after the event has been appended and committed.
+Replay calls `store.applyEvent` instead of writing files itself. `applyEvent` also reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a consistent monotonic write-path allocator. Gallery rendering calls `store.listItems` with optional tag filtering. Ingest calls `store.allocateImageId`, then later calls `store.applyEvent` after the event has been appended and committed.
 
 The store falls back to loading `event_cursor` from disk when the in-memory cursor cache is null. This means a fresh store instance reads the persisted cursor on first access, unlike the earlier design where the cursor was always null after construction.
 
@@ -195,7 +195,7 @@ A library repository contains canonical small-file history and derived local sta
 ```
 events/*.ndjson        canonical metadata events
 images/*               Git LFS pointer files
-index/next_image_id    local write-path ID sequence
+index/next_image_id    local monotonic write-path ID allocator
 index/image_state.json derived image state
 index/tag_index.json   derived tag index
 index/artifacts/*      cached rendered HTML artifacts (gallery pages)
@@ -214,11 +214,11 @@ JSON index writes use a temp-file-and-rename pattern per file. The store writes 
 - Tag indexes are derived from image state and tag events; they are not canonical.
 - OIDs are SHA-256 hashes of uploaded bytes.
 - Pointer file content is derived from OID and byte size using the Git LFS pointer format.
-- The ingest path uses sequential numeric IDs from `index/next_image_id`.
+- The ingest path uses monotonically increasing numeric IDs from `index/next_image_id`; IDs are intentionally allowed to be non-contiguous.
 - Startup requires `index/next_image_id` to exist with a valid integer >= 1 for `isInitialized()` to return true.
 - `listItems` loads the entire image state into memory; tag intersection is applied in-memory after loading.
 - The gallery page shell is cached by SHA-1 content hash of renderer version and gallery input.
-- `applyEvent` reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a correct write-path sequence.
+- `applyEvent` reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a correct monotonic write-path allocator.
 - `getCursor()` returns the persisted cursor from disk when the in-memory cache is empty.
 
 ## Trust, Error, and Failure Boundaries
@@ -273,9 +273,9 @@ The gallery uses HTMX for lazy-loaded fragment replacement rather than server-re
 
 Committing during the request path keeps repository history aligned with acknowledged ingests. It also couples request latency and availability to Git process execution and repository state.
 
-### Content-addressed blobs with sequential image IDs
+### Content-addressed blobs with monotonic image IDs
 
-LFS OIDs provide immutable content addressing. Sequential IDs provide short booru-style storage keys and display identifiers. The cost is that ID allocation depends on a mutable local sequence file, and failed ingest attempts can consume IDs.
+LFS OIDs provide immutable content addressing. Monotonically increasing image IDs provide short booru-style storage keys and display identifiers. IDs are not required to be contiguous; gaps from failed or abandoned ingest attempts are expected. The cost is that ID allocation depends on a mutable local allocation file.
 
 ### Thin LFS client
 

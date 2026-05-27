@@ -52,14 +52,17 @@ export interface DerivedIndexStore {
     isInitialized(): Promise<boolean>;
 
     /**
-     * Create an empty derived index from which event replay can start.
+     * Create or reset an empty derived index from which event replay can start.
      *
-     * This should create/reset derived index artifacts, initialize the write-path
-     * image ID sequence, remove any persisted replay cursor, and clear in-memory
-     * cursor state.
+     * This creates or replaces derived index artifacts, resets the write-path
+     * image ID allocator to `1`, removes any persisted replay cursor, and clears
+     * in-memory cursor state. After this method returns, `getCursor()` returns
+     * `null` until replay persists a new cursor, so replay starts from the
+     * beginning of the committed event log.
      *
-     * Call this only when `isInitialized()` returns `false`, before replaying
-     * committed events.
+     * Call this when `isInitialized()` returns `false`, or when an explicit
+     * rebuild should discard stale derived state before replaying committed
+     * events.
      *
      * @returns Resolves after the empty index artifacts are written.
      */

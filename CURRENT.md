@@ -124,10 +124,10 @@ Startup constructs `JsonFileIndexStore`, `NdjsonEventLog`, `CachingHtmlRenderer`
 - `JsonFileIndexStore` implements the interface with JSON files and process-local mutexes. Stores under library root:
   - `index/image_state.json` — `Record<string, ImageState>`
   - `index/tag_index.json` — `Record<string, string[]>`
-  - `index/next_image_id` — numeric sequence text
+  - `index/next_image_id` — monotonic numeric ID allocator text
   - `event_cursor` — `{eventFile, byteOffset}` JSON
 
-  `getCursor()` returns the in-memory cursor cache when non-null; otherwise it falls back to reading `event_cursor` from disk. `allocateImageId()` increments the file and in-memory sequence under a dedicated mutex. Writes use a temporary file plus `Deno.rename`. `applyEvent` loads both index files, applies the event reducer, writes image state and tag index, writes the cursor, and updates the in-memory cursor cache. `applyEvent` also reconciles `next_image_id` from committed add-event IDs.
+  `getCursor()` returns the in-memory cursor cache when non-null; otherwise it falls back to reading `event_cursor` from disk. `allocateImageId()` increments the file and in-memory allocator under a dedicated mutex. Image IDs are monotonically increasing but intentionally non-contiguous; gaps from failed or abandoned ingest attempts are expected. Writes use a temporary file plus `Deno.rename`. `applyEvent` loads both index files, applies the event reducer, writes image state and tag index, writes the cursor, and updates the in-memory cursor cache. `applyEvent` also reconciles `next_image_id` from committed add-event IDs.
 
   The `applyEventToIndexState` helper handles `add`, `tag_add`, `tag_remove`, `delete` event operations.
 
@@ -270,7 +270,7 @@ A library repository:
   index/
     image_state.json           Derived image state (Record<string, ImageState>)
     tag_index.json             Derived tag index (Record<string, string[]>)
-    next_image_id              Write-path ID sequence
+    next_image_id              Monotonic write-path ID allocator
     artifacts/gallery-pages/   Cached HTML renderer output (SHA-1 content-addressable)
   event_cursor                 Replay checkpoint JSON
 ```
@@ -291,7 +291,7 @@ A library repository:
 - JSON index writes (image state, tag index, cursor) are not committed as a single filesystem transaction.
 - `JsonFileIndexStore.getCursor()` falls back to reading `event_cursor` from disk when the in-memory cache is null, but the cursor file may be absent (e.g., after `initializeEmptyIndex()`).
 - The ingest handler performs LFS upload and pointer-file write before event append and Git commit.
-- The ingest handler reserves an ID before LFS upload and Git operations. Failed ingest attempts can consume IDs.
+- The ingest handler reserves an ID before LFS upload and Git operations. Failed ingest attempts can consume IDs; IDs are expected to be monotonic, not contiguous.
 - Event append rollback covers the NDJSON append when Git operations fail. It does not remove the pointer file, LFS object, or staged Git index state.
 - If derived-index application fails after Git commit, source files are committed but served indexes can be stale.
 - Mutexes are process-local and do not protect against other processes modifying the same library files.
