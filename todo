@@ -1,9 +1,12 @@
 does not throw or log error
 when failing to clone new library
 
- 2. Add server-side LFS object caching (no checkout-based hydration)
- - Keep serving binaries via direct LFS HTTP requests.
- - Add an optional local cache layer for hot objects.
+ 2. Add server-side LFS object caching or redirect-backed direct serving (no checkout-based hydration)
+ - Keep `/image/{oid}` as the canonical booru-owned URL rendered in HTML.
+ - Option A: keep serving binaries via direct LFS HTTP requests proxied by the booru server.
+ - Option B: return a 302 redirect from `/image/{oid}` to a browser-safe LFS object URL.
+ - Do not render concrete `LFS_SERVER` URLs directly into gallery HTML.
+ - Add an optional local cache layer for hot objects if proxying remains the default.
  - Evict with LRU, using max cache size (bytes) as primary limit.
  - Optional secondary guardrail: max object count.
  --> added lfs.fetchexclude to .lfsconfig
@@ -88,3 +91,4 @@ Git index rollback options
 - Add a pre-ingest Git cleanliness check, at least `git diff --cached --quiet`, and fail fast if the library repository already has staged changes.
 - Optional stricter precondition: require a fully clean worktree before ingest if manual edits are not supported in library repositories.
 - Commit-protected flow should be: place/write pointer file, stage pointer + event shard, commit, and on failure targeted-unstage touched paths plus remove ingest-created pointer file.
+refresh gallery on upload success?
