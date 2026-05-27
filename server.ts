@@ -10,6 +10,7 @@ import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
 import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
+import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
@@ -359,7 +360,7 @@ async function Start() {
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
 
-    const indexFlag = !(await store.isInitialized());
+    const indexFlag = cfg.rebuildIndex || !(await store.isInitialized());
 
     // todo: end process flags
 
@@ -367,12 +368,19 @@ async function Start() {
 
     // TODO:
     // if (indexFlag) console.log('Attempting re-index from last checkpoint')
-    if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
-    debug(`indexFlag=${indexFlag} IndexStoreBackend=${store.constructor.name}`);
+    if (cfg.rebuildIndex) console.log('Rebuilding index from committed events — this may take some time.');
+    else if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
+    debug(`indexFlag=${indexFlag} rebuildIndex=${cfg.rebuildIndex} IndexStoreBackend=${store.constructor.name}`);
 
-    if (!(await store.isInitialized())) {
+    if (indexFlag) {
         await store.initializeEmptyIndex();
         await processEvents(store, eventLog);
+    }
+
+    if (cfg.pack) {
+        console.log(`Importing Eagle pack: ${cfg.pack}`);
+        const count = await ingestFromEagleSource(lib, conn, store, eventLog, cfg.pack);
+        console.log(`✅ Imported ${count} items from ${cfg.pack}`);
     }
 
     const h = createHandler(store, eventLog, conn, lib, render);

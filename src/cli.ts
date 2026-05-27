@@ -57,6 +57,8 @@ export interface CliFlags {
     pack?: string;
     /** remove cached renderer artifacts before startup */
     clearArtifacts: boolean;
+    /** reset derived index artifacts and replay committed events from the beginning */
+    rebuildIndex: boolean;
 }
 
 function parsePort(port: string): number {
@@ -88,8 +90,8 @@ type PrefArr = keyof typeof flagDefaults;
 export function getFlags(): CliFlags {
     const flags = parseArgs(Deno.args, {
         string: Object.keys(flagDefaults) as PrefArr[],
-        boolean: ['clear-artifacts'],
-        default: { 'clear-artifacts': false },
+        boolean: ['clear-artifacts', 'rebuild-index'],
+        default: { 'clear-artifacts': false, 'rebuild-index': false },
     });
 
     // fallback values if a flag is unset
@@ -126,5 +128,6 @@ export function getFlags(): CliFlags {
         lib,
         pack: pack || undefined,
         clearArtifacts: flags['clear-artifacts'],
+        rebuildIndex: flags['rebuild-index'],
     };
 }
