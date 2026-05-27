@@ -91,6 +91,11 @@ export default function gallery(
         ?.map((tag) => renderFilterBar(false, tag))
         .join('\n') ?? '';
 
+    const pageSizeOptions = [...new Set([10, 25, 50, 100, search.limit])]
+        .sort((a, b) => a - b)
+        .map((limit) => html`<option value="${String(limit)}"${limit === search.limit && ' selected'}>${String(limit)}</option>`)
+        .join('\n');
+
     return html`
         <!DOCTYPE html>
         <html lang="en">
@@ -196,10 +201,7 @@ export default function gallery(
                                                     name="limit"
                                                     class="block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                                 >
-                                                    <option value="10">10</option>
-                                                    <option value="25">25</option>
-                                                    <option value="50">50</option>
-                                                    <option value="100">100</option>
+                                                    ${pageSizeOptions}
                                                 </select>
                                                 <button
                                                     type="submit"
