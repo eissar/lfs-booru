@@ -12,9 +12,20 @@ const eventsDir = 'events';
 export type EventAppendResult = {
     /** Relative repository path for the event log shard that was appended. */
     path: string;
+    /** Byte offset before the append began. */
     previousOffset: number;
     /** Cursor immediately after the appended event. */
     cursor: IndexCursor;
+};
+
+/**
+ * Result of appending a prepared NDJSON event file to the source event log.
+ */
+export type PreparedEventBatchAppendResult = EventAppendResult & {
+    /** Prepared NDJSON file that was copied into the event log. */
+    sourcePath: string;
+    /** Number of bytes copied from the prepared NDJSON file. */
+    appendedBytes: number;
 };
 
 /**
@@ -44,6 +55,23 @@ export interface EventLog {
         event: Event,
         fn: (appendResult: EventAppendResult) => Promise<void>,
     ): Promise<EventAppendResult>;
+
+    /**
+     * Append a prepared NDJSON event file for the duration of a protected operation.
+     *
+     * The prepared file must contain one serialized event per line and end with a
+     * newline when non-empty. If the callback resolves, the append is kept. If the
+     * callback rejects, the appended shard is truncated back to its previous offset
+     * before the error is rethrown.
+     *
+     * @param sourcePath Prepared NDJSON event file to append.
+     * @param fn Operation that must succeed for the append to be kept.
+     * @returns Batch append result containing the changed path and final cursor.
+     */
+    appendPreparedFileWithRollback(
+        sourcePath: string,
+        fn: (appendResult: PreparedEventBatchAppendResult) => Promise<void>,
+    ): Promise<PreparedEventBatchAppendResult>;
 }
 
 // don't expose this in EventLog
@@ -88,7 +116,6 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
      * Create an NDJSON event log rooted at a library path.
      *
      * @param libraryRootPath Library root path.
-     * @param shardName Function that returns the current event shard filename.
      * @returns File-backed event log instance.
      */
     constructor(libraryRootPath: string) {
@@ -183,6 +210,84 @@ export class NdjsonEventLog implements EventLog, EventLogReader {
 
             await Deno.truncate(absolutePath, appendResult.previousOffset);
             throw error;
+        }
+
+        return appendResult;
+    }
+
+    /**
+     * Append a prepared NDJSON event file and roll it back if the protected operation fails.
+     *
+     * The event-log mutex is held until the callback resolves or rollback
+     * completes, so no later append can be truncated accidentally.
+     *
+     * @param sourcePath Prepared NDJSON event file to append.
+     * @param fn Operation that must succeed for the append to be kept.
+     * @returns Batch append result containing the changed path and final cursor.
+     */
+    async appendPreparedFileWithRollback(
+        sourcePath: string,
+        fn: (appendResult: PreparedEventBatchAppendResult) => Promise<void>,
+    ): Promise<PreparedEventBatchAppendResult> {
+        using _lock = await this.mu.acquire();
+        const eventFile = getCurrentEventShard();
+        const path = join(eventsDir, eventFile);
+        const absolutePath = join(this.rootPath, path);
+
+        await Deno.mkdir(dirname(absolutePath), { recursive: true });
+
+        const sourceStat = await Deno.stat(sourcePath);
+
+        const previousOffset = await Deno.stat(absolutePath)
+            .then((stat) => stat.size)
+            .catch((error) => {
+                if (error instanceof Deno.errors.NotFound) return 0;
+                throw error;
+            });
+        const byteOffset = previousOffset + sourceStat.size;
+
+        const copyError = await (async () => {
+            await using source = await Deno.open(sourcePath, { read: true });
+            await using destination = await Deno.open(absolutePath, { write: true, append: true, create: true });
+            await source.readable.pipeTo(destination.writable);
+        })().then(() => null)
+            .catch((error) => error);
+
+        if (copyError != null) {
+            await Deno.truncate(absolutePath, previousOffset);
+            throw copyError;
+        }
+
+        const stat = await Deno.stat(absolutePath);
+        if (stat.size !== byteOffset) {
+            await Deno.truncate(absolutePath, previousOffset);
+            throw new Error('Cannot append prepared event file: event log size is unexpected');
+        }
+
+        const appendResult: PreparedEventBatchAppendResult = {
+            path,
+            previousOffset,
+            cursor: {
+                eventFile,
+                byteOffset,
+            },
+            sourcePath,
+            appendedBytes: sourceStat.size,
+        };
+
+        const callbackError = await fn(appendResult)
+            .then(() => null)
+            .catch((error) => error);
+
+        if (callbackError != null) {
+            const stat = await Deno.stat(absolutePath);
+
+            if (stat.size !== appendResult.cursor.byteOffset) {
+                throw new Error('Cannot roll back event append: event log has changed');
+            }
+
+            await Deno.truncate(absolutePath, appendResult.previousOffset);
+            throw callbackError;
         }
 
         return appendResult;

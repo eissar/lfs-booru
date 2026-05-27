@@ -1,4 +1,5 @@
 import { dirname, join } from '@std/path';
+import { TextLineStream } from '@std/streams';
 import type { Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
@@ -68,8 +69,27 @@ export interface DerivedIndexStore {
 
     getIdByOid(oid: string): Promise<string | null>;
 
-    /** apply and write event_cursor */
+    /**
+     * Apply one event and persist its replay cursor.
+     *
+     * @param event Event to apply.
+     * @param nextCursor Cursor immediately after the event.
+     * @returns Resolves after the derived indexes and cursor are persisted.
+     */
     applyEvent(event: Event, nextCursor: IndexCursor): Promise<void>;
+
+    /**
+     * Apply all events from a prepared NDJSON event file and persist the final cursor.
+     *
+     * The cursor after each event is computed from `eventFile` and `previousOffset`;
+     * only the final cursor is written to disk after the derived indexes are persisted.
+     *
+     * @param sourcePath Prepared NDJSON event file to read.
+     * @param eventFile Event shard filename containing the appended batch.
+     * @param previousOffset Byte offset immediately before the file's first event.
+     * @returns Resolves after the derived indexes and final cursor are persisted.
+     */
+    applyEventsFromFile(sourcePath: string, eventFile: string, previousOffset: number): Promise<void>;
 
     /**
      * Reserve the next image ID for a new add event.
@@ -266,6 +286,93 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         await writeJsonFile(indexPath, tagIndex);
 
         // Write cursor last only after the derived indexes are durable.
+        await writeJsonFile(cursorPath, nextCursor);
+        this.cursorCache = nextCursor;
+    }
+
+    /**
+     * Apply all events from a prepared NDJSON event file and persist the final cursor.
+     *
+     * @param sourcePath Prepared NDJSON event file to read.
+     * @param eventFile Event shard filename containing the appended batch.
+     * @param previousOffset Byte offset immediately before the file's first event.
+     * @returns Resolves after the derived indexes and final cursor are persisted.
+     */
+    async applyEventsFromFile(sourcePath: string, eventFile: string, previousOffset: number): Promise<void> {
+        using _lock = await this.mu.acquire();
+
+        const sourceStat = await Deno.stat(sourcePath);
+        if (!sourceStat.isFile) {
+            throw new Error(`Cannot apply event batch from "${sourcePath}": expected a file`);
+        }
+
+        if (sourceStat.size > 0) {
+            await using source = await Deno.open(sourcePath, { read: true });
+            await source.seek(sourceStat.size - 1, Deno.SeekMode.Start);
+
+            const lastByte = new Uint8Array(1);
+            const bytesRead = await source.read(lastByte);
+
+            if (bytesRead !== 1 || lastByte[0] !== 0x0a) {
+                throw new Error(`Cannot apply event batch from "${sourcePath}": expected final newline`);
+            }
+        }
+
+        const statePath = join(this.conn.path, 'index', 'image_state.json');
+        const indexPath = join(this.conn.path, 'index', 'tag_index.json');
+        const cursorPath = join(this.conn.path, 'event_cursor');
+
+        const imageState = await readJsonFile(statePath, () => ({} as ImageStateIndex));
+        const tagIndex = await readJsonFile(indexPath, () => ({} as TagIndex));
+
+        const encoder = new TextEncoder();
+        let byteOffset = previousOffset;
+        let maxCommittedAddId: number | null = null;
+        let appliedAny = false;
+
+        await using file = await Deno.open(sourcePath, { read: true });
+        const lineStream = file.readable
+            .pipeThrough(new TextDecoderStream())
+            .pipeThrough(new TextLineStream());
+
+        for await (const line of lineStream) {
+            const event = JSON.parse(line) as Event;
+            const lineBytes = encoder.encode(line).byteLength + 1;
+
+            applyEventToIndexState(imageState, tagIndex, event);
+            byteOffset += lineBytes;
+            appliedAny = true;
+
+            if (event.op === 'add') {
+                maxCommittedAddId = Math.max(maxCommittedAddId ?? 0, event.id);
+            }
+        }
+
+        if (!appliedAny) return;
+
+        if (maxCommittedAddId !== null) {
+            using _idLock = await this.nextIdMutex.acquire();
+
+            const nextIdPath = join(this.conn.path, 'index', 'next_image_id');
+            const text = await Deno.readTextFile(nextIdPath);
+            const currentNextId = Number(text.trim());
+
+            if (!isInt(currentNextId) || currentNextId < 1) {
+                throw new Error(`Cannot apply event batch: next image ID is "${text.trim()}"`);
+            }
+
+            const nextId = Math.max(currentNextId, maxCommittedAddId + 1);
+            await Deno.writeTextFile(nextIdPath, String(nextId), { create: false });
+        }
+
+        await writeJsonFile(statePath, imageState);
+        await writeJsonFile(indexPath, tagIndex);
+
+        const nextCursor: IndexCursor = {
+            eventFile,
+            byteOffset,
+        };
+
         await writeJsonFile(cursorPath, nextCursor);
         this.cursorCache = nextCursor;
     }
