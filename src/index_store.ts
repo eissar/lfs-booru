@@ -4,7 +4,7 @@ import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 import { isInt } from '@/util.ts';
 
-type ItemSortField = 'id'; // | 'date';
+type ItemSortField = 'id' | 'addedAt';
 type ItemSortDirection = -1 | 1;
 export type ItemSort = {
     field: ItemSortField;
@@ -290,9 +290,23 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
         const sort = options.sort ?? { field: 'id', direction: -1 };
 
-        const sortedEntries = Object.entries(entries).sort(([a], [b]) => {
+        const sortedEntries = Object.entries(entries).sort(([aId, a], [bId, b]) => {
             if (sort.field === 'id') {
-                return (Number(a) - Number(b)) * sort.direction;
+                return (Number(aId) - Number(bId)) * sort.direction;
+            }
+
+            if (sort.field === 'addedAt') {
+                let compared = 0;
+
+                if (a.addedAt < b.addedAt) {
+                    compared = -1;
+                } else if (a.addedAt > b.addedAt) {
+                    compared = 1;
+                }
+
+                if (compared !== 0) return compared * sort.direction;
+
+                return (Number(aId) - Number(bId)) * sort.direction;
             }
 
             return 0;
@@ -444,6 +458,7 @@ function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex,
                 height: event.height,
                 name: event.name,
                 mtime: event.mtime,
+                addedAt: event.addedAt,
             };
             imageState[id] = img;
             for (const tag of img.tags) addToTag(tagIndex, tag, id);

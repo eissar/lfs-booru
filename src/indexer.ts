@@ -10,6 +10,9 @@ import { panic } from './util.ts';
 //     Update = 'update',
 // }
 
+// TODO: evaluate - should
+// added be here or in it's
+// own index file ?
 export type ImageState = {
     oid: string;
     path: string;
@@ -18,6 +21,7 @@ export type ImageState = {
     height: number;
     name: string;
     mtime: string;
+    addedAt: string;
 };
 
 export type AddEvent = {
@@ -30,6 +34,7 @@ export type AddEvent = {
     height: number;
     name: string;
     mtime: string;
+    addedAt: string;
 };
 
 export type TagAddEvent = {

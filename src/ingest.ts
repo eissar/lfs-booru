@@ -175,6 +175,7 @@ export async function ingest(
         height,
         name,
         mtime,
+        addedAt: new Date().toISOString(),
     };
 
     // NOTE: make sure to set cause:res when making lfs-server requests
