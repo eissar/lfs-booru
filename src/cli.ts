@@ -53,6 +53,8 @@ export interface CliFlags {
     port: number;
     /** path to the library */
     lib: string;
+    /** optional path to an .eaglepack archive to import on startup */
+    pack?: string;
     /** remove cached renderer artifacts before startup */
     clearArtifacts: boolean;
 }
@@ -70,6 +72,7 @@ const flagDefaults = {
     'lfsauth': DEFAULT_LFS_AUTH,
     'port': DEFAULT_PORT,
     'lib': DEFAULT_BOORU_LIBRARY_PATH,
+    'pack': undefined as string | undefined,
 } as const;
 
 type PrefArr = keyof typeof flagDefaults;
@@ -94,6 +97,8 @@ export function getFlags(): CliFlags {
     const lfsauth = Deno.env.get('BOORU_LFS_AUTH') ?? flagDefaults.lfsauth;
     const port = Deno.env.get('BOORU_PORT') ?? flagDefaults.port;
     let lib = Deno.env.get('BOORU_LIBRARY') ?? flagDefaults.lib;
+    // optional ,no fallback
+    let pack = flags.pack;
 
     if (Deno.env.has('BOORU_LIBRARY')) flags.lib = Deno.env.get('BOORU_LIBRARY') as string;
 
@@ -106,11 +111,20 @@ export function getFlags(): CliFlags {
     }
     lib = resolve(lib);
 
+    if (pack) {
+        if (pack.startsWith('~/')) {
+            if (!HOME) panic('Cannot substitute ~ in pack path when HOME is unset');
+            pack = pack.replace('~', HOME);
+        }
+        pack = resolve(pack);
+    }
+
     return {
         lfsserver: flags.lfsserver ?? lfsserver,
         lfsauth: flags.lfsauth ?? lfsauth,
         port: parsePort(flags.port ?? port),
         lib,
+        pack: pack || undefined,
         clearArtifacts: flags['clear-artifacts'],
     };
 }

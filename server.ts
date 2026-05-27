@@ -306,16 +306,6 @@ function createHandler(
     };
 }
 
-async function clearRendererArtifacts(libraryPath: string): Promise<void> {
-    const artifactsPath = join(libraryPath, 'index', 'artifacts');
-
-    try {
-        await Deno.remove(artifactsPath, { recursive: true });
-    } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
-    }
-}
-
 export function withLogging(
     handler: (req: Request) => Promise<Response>,
 ): (req: Request) => Promise<Response> {
@@ -356,7 +346,13 @@ async function Start() {
     await Init(lib.path);
 
     if (cfg.clearArtifacts) {
-        await clearRendererArtifacts(lib.path);
+        const artifactsPath = join(lib.path, 'index', 'artifacts');
+
+        try {
+            await Deno.remove(artifactsPath, { recursive: true });
+        } catch (error) {
+            if (!(error instanceof Deno.errors.NotFound)) throw error;
+        }
     }
 
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
