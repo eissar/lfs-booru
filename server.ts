@@ -123,6 +123,18 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         );
     }
 
+    if (url.pathname.startsWith('/inspect/')) {
+        const oid = url.pathname.split('/')[2];
+        const id = await store.getIdByOid(oid);
+        if (!id) return c.error(`could not find id for ${oid}`);
+        const list = store.listImagesByIds([id]);
+
+        // just return the first
+        for await (const [_id, img] of list) {
+            return c.json(img);
+        }
+    }
+
     if (url.pathname === '/fragment/items') {
         let limit = Number(url.searchParams.get('limit'));
         if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;

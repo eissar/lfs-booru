@@ -11,6 +11,7 @@ import type { GalleryImage } from '@/renderer.ts';
  */
 export default function imageCard(image: GalleryImage, tags: string): string {
     const imageSrc = `/image/${image.oid}`; // oid doesn't need escape
+    const imageInspect = `/inspect/${image.oid}`;
     const imageName = escape(image.name);
 
     return html`
@@ -32,6 +33,9 @@ export default function imageCard(image: GalleryImage, tags: string): string {
                     loading="lazy"
                     width="${image.width}"
                     height="${image.height}"
+                    hx-get="${imageInspect}"
+                    hx-target="#inspector-content"
+                    hx-swap="innerHTML"
                     class="transition-transform duration-300 peer-hover:scale-105 order-1"
                 />
             </div>

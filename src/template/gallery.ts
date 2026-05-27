@@ -86,7 +86,8 @@ function renderInspectorShell(): string {
                         onclick="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
                     >×</button>
                 </header>
-                <div id="inspector-content" class="inspector-body min-h-0 flex-1 overflow-y-auto">
+                <div id="inspector-content" class="inspector-body min-h-0 flex-1 overflow-y-auto"
+                   hx-on::after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')">
                     <p class="text-sm" style="color: var(--text-muted);">Select an image to inspect it.</p>
                 </div>
             </div>
