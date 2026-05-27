@@ -11,7 +11,7 @@ import type { GalleryImage } from '@/renderer.ts';
  */
 export default function imageCard(image: GalleryImage, tags: string): string {
     const imageSrc = `/image/${image.oid}`; // oid doesn't need escape
-    const imageInspect = `/inspect/${image.oid}`;
+    const imageInspect = `/fragment/inspect/${image.oid}`;
     const imageName = escape(image.name);
 
     return html`

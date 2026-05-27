@@ -123,15 +123,15 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         );
     }
 
-    if (url.pathname.startsWith('/inspect/')) {
-        const oid = url.pathname.split('/')[2];
+    if (url.pathname.startsWith('/fragment/inspect/')) {
+        const oid = url.pathname.split('/')[3];
         const id = await store.getIdByOid(oid);
-        if (!id) return c.error(`could not find id for ${oid}`);
+        if (!id) return c.error(`Could not find id for "${oid}"`);
         const list = store.listImagesByIds([id]);
 
         // just return the first
         for await (const [_id, img] of list) {
-            return c.json(img);
+            return c.html(await render.renderInspector(img));
         }
     }
 

@@ -37,6 +37,14 @@ export interface HtmlRenderer {
         title: string;
     }): Promise<string>;
 
+    /**
+     * Render an inspector fragment for one image.
+     *
+     * @param image Image state to inspect.
+     * @returns Rendered HTML fragment.
+     */
+    renderInspector(image: ImageState): Promise<string>;
+
     renderPhotoGrid(input: { cards: string; offset: string; hasMore: boolean }): Promise<string>;
 }
 
@@ -139,6 +147,11 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         });
 
         return html;
+    }
+
+    /** {@inheritDoc HtmlRenderer.renderInspector} */
+    async renderInspector(image: ImageState): Promise<string> {
+        return await Promise.resolve(template.fragment.inspector(image));
     }
 
     // TODO: rename to renderCardGrid ?
