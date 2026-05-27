@@ -53,6 +53,8 @@ export interface CliFlags {
     port: number;
     /** path to the library */
     lib: string;
+    /** remove cached renderer artifacts before startup */
+    clearArtifacts: boolean;
 }
 
 function parsePort(port: string): number {
@@ -83,6 +85,8 @@ type PrefArr = keyof typeof flagDefaults;
 export function getFlags(): CliFlags {
     const flags = parseArgs(Deno.args, {
         string: Object.keys(flagDefaults) as PrefArr[],
+        boolean: ['clear-artifacts'],
+        default: { 'clear-artifacts': false },
     });
 
     // fallback values if a flag is unset
@@ -92,6 +96,8 @@ export function getFlags(): CliFlags {
     let lib = Deno.env.get('BOORU_LIBRARY') ?? flagDefaults.lib;
 
     if (Deno.env.has('BOORU_LIBRARY')) flags.lib = Deno.env.get('BOORU_LIBRARY') as string;
+
+    lib = flags.lib ?? lib;
 
     // normalize input here
     if (lib.startsWith('~/')) {
@@ -104,6 +110,7 @@ export function getFlags(): CliFlags {
         lfsserver: flags.lfsserver ?? lfsserver,
         lfsauth: flags.lfsauth ?? lfsauth,
         port: parsePort(flags.port ?? port),
-        lib: flags.lib ?? lib,
+        lib,
+        clearArtifacts: flags['clear-artifacts'],
     };
 }

@@ -1,4 +1,5 @@
 import { serveDir } from '@std/http/file-server';
+import { join } from '@std/path';
 
 import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
 
@@ -305,6 +306,16 @@ function createHandler(
     };
 }
 
+async function clearRendererArtifacts(libraryPath: string): Promise<void> {
+    const artifactsPath = join(libraryPath, 'index', 'artifacts');
+
+    try {
+        await Deno.remove(artifactsPath, { recursive: true });
+    } catch (error) {
+        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+}
+
 export function withLogging(
     handler: (req: Request) => Promise<Response>,
 ): (req: Request) => Promise<Response> {
@@ -343,6 +354,10 @@ async function Start() {
 
     // idempotent
     await Init(lib.path);
+
+    if (cfg.clearArtifacts) {
+        await clearRendererArtifacts(lib.path);
+    }
 
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
