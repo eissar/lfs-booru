@@ -10,7 +10,10 @@ import type { GalleryImage } from '@/renderer.ts';
  * @returns The item card HTML fragment string.
  */
 export default function itemCard(image: GalleryImage, tags: string): string {
-    const imageSrc = `/image/${image.oid}`; // oid doesn't need escape
+    let imageSrc = `/image/${image.oid}`; // oid doesn't need escape
+    let thumbSrc = `/image/${image.oid}`; // use the image itself as a fallback?
+    if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
+
     const imageInspect = `/fragment/inspect/${image.oid}`;
     const imageName = escape(image.name);
 
@@ -29,7 +32,7 @@ export default function itemCard(image: GalleryImage, tags: string): string {
 
                 <!-- TODO: add alt -->
                 <img
-                    src="${imageSrc}"
+                    src="${thumbSrc}"
                     loading="lazy"
                     width="${image.width}"
                     height="${image.height}"

@@ -15,6 +15,7 @@ import { panic } from './util.ts';
 // own index file ?
 export type ImageState = {
     oid: string;
+    thumbnailOid?: string;
     path: string;
     tags: string[];
     width: number;
@@ -28,6 +29,7 @@ export type AddEvent = {
     op: 'add';
     id: number;
     oid: string;
+    thumbnailOid?: string;
     path: string;
     tags?: string[];
     width: number;

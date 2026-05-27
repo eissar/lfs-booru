@@ -562,6 +562,7 @@ function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex,
 
             const img: ImageState = {
                 oid: event.oid,
+                thumbnailOid: event.thumbnailOid,
                 path: event.path,
                 tags: event.tags || [],
                 width: event.width,

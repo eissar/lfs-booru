@@ -5,6 +5,7 @@ import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
 import { startsWith } from '@std/bytes';
 import { dirname, join } from '@std/path';
+import { generateThumbnail } from './thumbnail.ts';
 
 const MAGIC_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MAGIC_JPEG = new Uint8Array([0xff, 0xd8, 0xff]);
@@ -202,6 +203,33 @@ export async function ingest(
         .catch(() => {
             throw new Error(`failed to write pointer at ${pointerPath}`);
         });
+
+    // Generate thumbnail and push to LFS.
+    const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } =
+        await generateThumbnail(bytes, fileExtension);
+
+    await PutObjectMeta(conn, thumbnailOid, thumbnailSize).then((res) => {
+        if (!res.ok) {
+            throw new Error('put thumbnail meta failed', {
+                cause: res,
+            });
+        }
+    });
+    await PutObjectContent(conn, thumbnailOid, thumbnailBlob).then((res) => {
+        if (!res.ok) {
+            throw new Error('LFS thumbnail push failed', {
+                cause: res,
+            });
+        }
+    });
+
+    const thumbPointerPath = join(lib.path, 'thumbnails', `${id}.jpg`);
+    await Deno.mkdir(dirname(thumbPointerPath), { recursive: true });
+    await writePointerFile(thumbnailOid, thumbnailSize, thumbPointerPath).catch(() => {
+        throw new Error(`failed to write thumbnail pointer at ${thumbPointerPath}`);
+    });
+
+    event.thumbnailOid = thumbnailOid;
 
     return event;
 }

@@ -347,7 +347,11 @@ export default function gallery(
                                                 Upload
                                             </button>
                                         </form>
-                                        <div id="upload-result" class="p-4 pt-0"></div>
+                                        <div
+                                            id="upload-result"
+                                            class="p-4 pt-0"
+                                            hx-on::before-swap="if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+                                        ></div>
                                     </div>
                                 </details>
                             </div>
