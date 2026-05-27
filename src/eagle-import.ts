@@ -1,7 +1,6 @@
-import { EventLog } from './event_log.ts';
+import type { EventLog } from './event_log.ts';
 import { stageAndCommit } from './git.ts';
 import type { DerivedIndexStore } from './index_store.ts';
-import type { AddEvent } from './indexer.ts';
 import { ingest } from './ingest.ts';
 import type { LfsConnection } from './lfs/api.ts';
 import type { LibraryConnection } from './library.ts';
@@ -31,7 +30,7 @@ async function* walkInfoDirs(
         let data: Uint8Array | null = null;
         for await (const fe of Deno.readDir(dir)) {
             if (fe.isFile && fe.name !== 'metadata.json') {
-                debug(`processing dir ${dir}`)
+                debug(`processing dir ${dir}`);
                 data = await Deno.readFile(`${dir}/${fe.name}`);
                 break;
             }
@@ -47,6 +46,7 @@ async function* walkInfoDirs(
  * cleaned up when the iterator returns or throws.
  *
  * @param packPath Path to the `.eaglepack` file.
+ * @returns Async iterable of metadata and image bytes from the archive.
  *
  * @example
  * ```ts ignore
@@ -91,28 +91,29 @@ export async function* openEaglePack(
  * `.eaglepack` zip archive.
  *
  * Each entry is ingested via {@link ingest} with its name, tags, dimensions,
- * and modification time, then committed to the event log individually.
+ * and modification time, then staged into a prepared NDJSON event file and
+ * committed to the event log as one batch.
  *
  * @param lib Library connection descriptor.
  * @param conn LFS server connection.
  * @param store Derived index store.
  * @param eventLog Source event log for committing.
  * @param path Path to a `.eaglepack` file or a `.library` directory.
- * @returns Array of add events produced during import.
+ * @returns Number of add events produced during import.
  *
  * @example
  * ```ts ignore
  * import { ingestFromEagleSource } from './eagle-import.ts';
  *
- * const events = await ingestFromEagleSource(lib, conn, store, log, './Memes.library');
- * console.log(`Imported ${events.length} items from library`);
+ * const imported = await ingestFromEagleSource(lib, conn, store, log, './Memes.library');
+ * console.log(`Imported ${imported} items from library`);
  * ```
  *
  * @example
  * ```ts ignore
  * import { ingestFromEagleSource } from './eagle-import.ts';
  *
- * const events = await ingestFromEagleSource(lib, conn, store, log, './Packs/Art.eaglepack');
+ * const imported = await ingestFromEagleSource(lib, conn, store, log, './Packs/Art.eaglepack');
  * ```
  */
 export async function ingestFromEagleSource(
@@ -121,47 +122,72 @@ export async function ingestFromEagleSource(
     store: DerivedIndexStore,
     eventLog: EventLog,
     path: string,
-): Promise<AddEvent[]> {
+): Promise<number> {
     const info = await Deno.stat(path);
     const entries: AsyncGenerator<[Record<string, unknown>, Uint8Array]> = info.isDirectory
         ? walkInfoDirs(`${path}/images`)
         : openEaglePack(path);
 
-    const events: AddEvent[] = [];
+    const tempDir = await Deno.makeTempDir({ dir: '/tmp', prefix: 'eagle-import-events-' });
+    const preparedEventsPath = `${tempDir}/events.ndjson`;
+    const pointerPaths: string[] = [];
+    const encoder = new TextEncoder();
+    let eventCount = 0;
 
-    for await (const [meta, bytes] of entries) {
-        const ext = (meta.ext as string) || '';
-        const mime = ext
-            ? typeByExtension(`.${ext.toLowerCase()}`) || 'application/octet-stream'
-            : 'application/octet-stream';
-        const name = (meta.name as string) || `image.${ext}` || 'image';
-        const file = new File([bytes as BlobPart], name, { type: mime });
+    try {
+        {
+            await using preparedEvents = await Deno.open(preparedEventsPath, { write: true, createNew: true });
 
-        const tags = Array.isArray(meta.tags) ? (meta.tags as string[]).filter((t) => typeof t === 'string') : [];
+            for await (const [meta, bytes] of entries) {
+                const ext = (meta.ext as string) || '';
+                const mime = ext
+                    ? typeByExtension(`.${ext.toLowerCase()}`) || 'application/octet-stream'
+                    : 'application/octet-stream';
+                const name = (meta.name as string) || `image.${ext}` || 'image';
+                const file = new File([bytes as BlobPart], name, { type: mime });
 
-        const width = typeof meta.width === 'number' ? meta.width : undefined;
-        const height = typeof meta.height === 'number' ? meta.height : undefined;
-        const mtime = typeof meta.modificationTime === 'string' ? meta.modificationTime : undefined;
+                const tags = Array.isArray(meta.tags)
+                    ? (meta.tags as string[]).filter((tag) => typeof tag === 'string')
+                    : [];
 
-        events.push(await ingest(lib, conn, store, file, tags, name, height, width, mtime));
+                const width = typeof meta.width === 'number' ? meta.width : undefined;
+                const height = typeof meta.height === 'number' ? meta.height : undefined;
+                const mtime = typeof meta.modificationTime === 'string' ? meta.modificationTime : undefined;
+                const event = await ingest(lib, conn, store, file, tags, name, height, width, mtime)
+                    .catch((e) => {
+                        console.warn(`could not import: ${name} ${e.message}`);
+                        return null;
+                    });
+                if (event === null) continue;
+
+                const eventBytes = encoder.encode(`${JSON.stringify(event)}\n`);
+
+                let bytesWritten = 0;
+                while (bytesWritten < eventBytes.byteLength) {
+                    const written = await preparedEvents.write(eventBytes.subarray(bytesWritten));
+
+                    if (written === 0) {
+                        throw new Error('Cannot write prepared Eagle import event file: wrote zero bytes');
+                    }
+
+                    bytesWritten += written;
+                }
+
+                pointerPaths.push(event.path);
+                eventCount++;
+            }
+        }
+
+        if (eventCount === 0) return 0;
+
+        const appendResult = await eventLog.appendPreparedFileWithRollback(preparedEventsPath, async (appendResult) => {
+            const paths = Array.from(new Set([appendResult.path, ...pointerPaths]));
+            await stageAndCommit(paths, `booru: import ${eventCount} eagle items`, lib);
+        });
+
+        await store.applyEventsFromFile(preparedEventsPath, appendResult.cursor.eventFile, appendResult.previousOffset);
+        return eventCount;
+    } finally {
+        await Deno.remove(tempDir, { recursive: true }).catch(() => {});
     }
-
-    if (events.length === 0) return events;
-
-    const appendResult = await eventLog.appendManyWithRollback(events, async (appendResult) => {
-        const paths = Array.from(
-            new Set([
-                appendResult.path,
-                ...events.map((event) => event.path),
-            ]),
-        );
-        await stageAndCommit(paths, `booru: import ${events.length} eagle items`, lib);
-    });
-
-    for (let i = 0; i < events.length; i++) {
-        await store.applyEvent(events[i], appendResult.cursors[i]);
-    }
-
-    return events;
 }
-

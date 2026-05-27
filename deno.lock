@@ -20,6 +20,7 @@
     "jsr:@std/http@^1.1.0": "1.1.0",
     "jsr:@std/internal@^1.0.12": "1.0.13",
     "jsr:@std/internal@^1.0.13": "1.0.13",
+    "jsr:@std/media-types@1.1.0": "1.1.0",
     "jsr:@std/media-types@^1.1.0": "1.1.0",
     "jsr:@std/net@^1.0.6": "1.0.6",
     "jsr:@std/path@1.1.4": "1.1.4",
@@ -28,6 +29,7 @@
     "jsr:@std/streams@^1.0.13": "1.0.17",
     "jsr:@std/streams@^1.1.0": "1.1.0",
     "npm:@types/node@*": "24.2.0",
+    "npm:@zip.js/zip.js@2.8.26": "2.8.26",
     "npm:postcss-selector-parser@7.1.1": "7.1.1",
     "npm:postcss@8.5.15": "8.5.15",
     "npm:simple-git@3.36.0": "3.36.0",
@@ -89,7 +91,7 @@
         "jsr:@std/fmt",
         "jsr:@std/fs",
         "jsr:@std/html@^1.0.6",
-        "jsr:@std/media-types",
+        "jsr:@std/media-types@^1.1.0",
         "jsr:@std/net",
         "jsr:@std/path@^1.1.4",
         "jsr:@std/streams@^1.1.0"
@@ -150,6 +152,9 @@
       "dependencies": [
         "undici-types"
       ]
+    },
+    "@zip.js/zip.js@2.8.26": {
+      "integrity": "sha512-RQ4h9F6DOiHxpdocUDrOl6xBM+yOtz+LkUol47AVWcfebGBDpZ7w7Xvz9PS24JgXvLGiXXzSAfdCdVy1tPlaFA=="
     },
     "cssesc@3.0.0": {
       "integrity": "sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==",
@@ -323,8 +328,10 @@
       "jsr:@std/dotenv@0.225.6",
       "jsr:@std/html@*",
       "jsr:@std/http@^1.1.0",
+      "jsr:@std/media-types@1.1.0",
       "jsr:@std/path@1.1.4",
       "jsr:@std/streams@*",
+      "npm:@zip.js/zip.js@2.8.26",
       "npm:simple-git@3.36.0"
     ]
   }
