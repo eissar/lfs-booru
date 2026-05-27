@@ -16,6 +16,7 @@ const sampleImages: GalleryImage[] = [
         height: 1067,
         name: 'Example landscape.png',
         mtime: '2026-05-25T00:00:00.000Z',
+        addedAt: '2026-05-25T00:00:00.000Z',
     },
     {
         id: '2',
@@ -26,6 +27,7 @@ const sampleImages: GalleryImage[] = [
         height: 1200,
         name: 'Example portrait.png',
         mtime: '2026-05-25T00:00:00.000Z',
+        addedAt: '2026-05-25T00:00:00.000Z',
     },
 ];
 

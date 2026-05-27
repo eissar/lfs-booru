@@ -199,6 +199,7 @@ if (import.meta.main) {
             height,
             name: basename(imagePath),
             mtime: (stat.mtime ?? new Date()).toISOString(),
+            addedAt: new Date().toISOString(),
         };
 
         const [ingestError, ingestMs] = await timed(() => internalIngest(bytes, conn, lib, eventLog, event));
