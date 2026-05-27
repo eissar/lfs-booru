@@ -1,4 +1,4 @@
-> Snapshot commit: HASH:6636da733b079bdb2d2d1a4354d9d097e989eb9f
+> Snapshot commit: HASH:5df973e8a5fd8fe293146a172f52c345195b916b
 
 # Codebase Snapshot
 
@@ -16,11 +16,14 @@ A Deno-based booru prototype that stores image bytes in a Git LFS server, stores
 
 ## Configuration
 
-`deno.json` defines one task and the following import map:
+`deno.json` defines runtime and lint-artifact tasks and the following import map:
 
 ```json
 {
-    "tasks": { "run": "deno run --allow-all ./server.ts" },
+    "tasks": {
+        "run": "deno run --allow-all ./server.ts",
+        "lint-artifacts": "deno run --allow-write=.lint-artifacts,app.log scripts/render_lint_artifacts.ts && deno run -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
+    },
     "imports": {
         "@std/http": "jsr:@std/http@^1.1.0",
         "@std/cli": "jsr:@std/cli@1.0.29",
@@ -29,6 +32,7 @@ A Deno-based booru prototype that stores image bytes in a Git LFS server, stores
         "@std/html": "jsr:@std/html",
         "@std/path": "jsr:@std/path@1.1.4",
         "@std/async": "jsr:@std/async@1.3.0",
+        "@std/bytes": "jsr:@std/bytes@^1.0.6",
         "@core/asyncutil": "jsr:@core/asyncutil",
         "simple-git": "npm:simple-git@3.36.0",
         "@/": "./src/"
@@ -36,7 +40,8 @@ A Deno-based booru prototype that stores image bytes in a Git LFS server, stores
 }
 ```
 
-- `npm:typescript@6.0.3` is imported by `scripts/dump_types.ts` but is not listed in `deno.json` imports; it is resolved inline via `npm:` specifier.
+- `npm:typescript@6.0.3` is imported by `scripts/dump_types.ts` through an inline `npm:` specifier.
+- `scripts/find_unused_css.ts` imports PostCSS and selector parser through inline `npm:` specifiers.
 - Formatter settings: 4-space indent, single quotes, 120-column width, excludes Markdown and JSON files.
 - TypeScript strict mode is enabled.
 
@@ -48,6 +53,7 @@ CLI flags and environment variables configure runtime settings:
 | `--lfsauth` | `BOORU_LFS_AUTH` | `Basic ${btoa('user:pass')}` |
 | `--port` | `BOORU_PORT` | `8000` |
 | `--lib` | `BOORU_LIBRARY` | `$XDG_DOCUMENTS_DIR/Libraries/Default` |
+| `--clear-artifacts` | — | `false` |
 
 The `.env` file is loaded via `@std/dotenv`.
 
@@ -72,15 +78,18 @@ src/
   renderer.ts                      HtmlRenderer interface with file-backed caching for gallery pages
   util.ts                          Panic helper, isInt type guard, and HTTP response utility object (c)
   template/
-    index.ts                       Exports template functions: Gallery, ImageCard, photoGrid
+    index.ts                       Exports template functions: Gallery, ImageCard, photoGrid, inspector
     gallery.ts                     Full gallery page HTML template (HTMX, Tailwind CSS, dark mode)
     item-card.ts                   Item card fragment HTML template
+    inspector_fragment.ts          Inspector fragment HTML template
     photo-grid_fragment.ts         Photo grid masonry fragment HTML template
 static/
   gallery.css                      Gallery stylesheet: light/dark theme, masonry grid, component classes
 scripts/
   dump_types.ts                    Source type-surface dump utility
+  find_unused_css.ts               CSS selector usage scanner for generated artifacts
   read_json_sync_bench.ts          JSON index-shaped benchmark utility
+  render_lint_artifacts.ts         HTML/CSS artifact generator for stylesheet linting
 ```
 
 ## Key Modules
@@ -94,6 +103,7 @@ Startup constructs `JsonFileIndexStore`, `NdjsonEventLog`, `CachingHtmlRenderer`
 | `/` | any | Redirects to `/gallery` (302) |
 | `/gallery` | any | Renders gallery HTML via `handleUiRoutes` → `renderGalleryPage` |
 | `/fragment/items` | any | Returns photo grid fragment via `handleUiRoutes` → `renderPhotoGrid` (HTMX lazy-load target) |
+| `/fragment/inspect/:oid` | any | Looks up an image by OID and returns the inspector fragment |
 | `/ingest` | POST | Parses multipart form, writes to LFS, appends event with rollback, commits, updates index |
 | `/image/:oid` | any | Proxies raw object content from the LFS server |
 | `/static/*` | any | Serves files from `./static` through `serveDir` |
@@ -155,13 +165,14 @@ URL helpers use `/{user}/{repo}/objects` when either user or repo is non-empty, 
 
 ### Renderer (`src/renderer.ts`)
 
-`CachingHtmlRenderer` implements `HtmlRenderer`. It renders image cards via `ImageCard` template, and caches gallery pages under `index/artifacts/gallery-pages` by SHA-1 content hash of version, title, and query string. The `renderPhotoGrid` method renders a photo grid fragment via `photoGrid` template.
+`CachingHtmlRenderer` implements `HtmlRenderer`. It renders item cards via the exported `ImageCard` template, renders inspector fragments, and caches gallery pages under `index/artifacts/gallery-pages` by SHA-1 content hash of the renderer version and gallery input. The `renderPhotoGrid` method renders a photo grid fragment via the `photoGrid` template.
 
 ### Templates (`src/template/`)
 
 - `gallery.ts`: Full gallery page with HTMX (`htmx.org@2.0.4`), Tailwind CSS (CDN), dark mode toggle, search input, and upload form with drag-and-drop support.
 - `item-card.ts`: Renders an item card with linked thumbnail (`/image/{oid}`), escaped name, dimensions, and tag links.
-- `photo-grid_fragment.ts`: Renders a `<div id="photo-grid">` with masonry grid class for HTMX fragment replacement.
+- `inspector_fragment.ts`: Renders image metadata for the inspector panel.
+- `photo-grid_fragment.ts`: Renders a `<div id="photo-grid">` with masonry grid class and pagination controls for HTMX fragment replacement.
 
 ### Static files (`static/gallery.css`)
 
@@ -218,8 +229,14 @@ GET / or GET /gallery
   -> client-side HTMX requests /fragment/items
   -> store.listItems() — tag intersection filtered in memory
   -> render.renderImageCard() for each image
-  -> render.renderPhotoGrid() wraps cards in masonry grid
+  -> render.renderPhotoGrid() wraps cards in masonry grid with pagination controls
   -> HTMX swaps .main-content with photo grid fragment
+
+GET /fragment/inspect/{oid}
+  -> store.getIdByOid(oid)
+  -> store.listImagesByIds([id])
+  -> render.renderInspector()
+  -> HTMX swaps #inspector-content
 
 GET /image/{oid}
   -> GetObjectContent(conn, oid)
@@ -263,6 +280,8 @@ A library repository:
 ## Scripts and Utilities
 
 - `scripts/dump_types.ts` walks `src/`, creates a TypeScript program, and prints declarations for interfaces, type aliases, classes, and function signatures.
+- `scripts/render_lint_artifacts.ts` writes representative template output under `.lint-artifacts/` for stylesheet checks.
+- `scripts/find_unused_css.ts` compares CSS selectors against generated content files and reports selectors whose required classes, IDs, elements, or attributes are absent.
 - `scripts/read_json_sync_bench.ts` creates or reuses `scripts/big.internal.json` for benchmarking synchronous JSON reads. Files matching `*.internal.*` are gitignored.
 - `src/test_InitWith5Images.ts` measures end-to-end ingest timing for 5 PNG images against a running LFS server. Creates a fresh library via `Init`, computes OIDs and PNG dimensions, uploads to LFS, writes pointers, appends events with Git commit, and prints per-image and aggregate timings.
 - `build.internal.sh` is a convenience script that kills the running booru server, removes cached artifacts, and restarts.

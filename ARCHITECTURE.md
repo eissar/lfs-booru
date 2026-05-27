@@ -109,10 +109,10 @@ Git operations are localized to `Init` and `stageAndCommit`. `Init` handles clon
 
 There are two rendering layers:
 
-- `CachingHtmlRenderer` implements `HtmlRenderer`. It renders individual image cards (uncached), gallery pages (cached by content hash under `index/artifacts/gallery-pages`), and photo grid fragments (uncached).
-- Template functions in `src/template/` (`gallery.ts`, `item-card.ts`, `photo-grid_fragment.ts`) produce escaped HTML strings.
+- `CachingHtmlRenderer` implements `HtmlRenderer`. It renders individual item cards (uncached), inspector fragments (uncached), gallery pages (cached by content hash under `index/artifacts/gallery-pages`), and photo grid fragments (uncached).
+- Template functions in `src/template/` (`gallery.ts`, `item-card.ts`, `inspector_fragment.ts`, `photo-grid_fragment.ts`) produce escaped HTML strings.
 
-The server handler uses the renderer for all gallery requests. Image cards include tag links pointing to `/gallery?tags=...` for filtered navigation. The gallery page renders an HTMX shell that lazy-loads items from `/fragment/items`.
+The server handler uses the renderer for all gallery and inspector fragment requests. Item cards include tag links pointing to `/gallery?tags=...` for filtered navigation and HTMX attributes that load `/fragment/inspect/{oid}` into the inspector panel. The gallery page renders an HTMX shell that lazy-loads items from `/fragment/items`.
 
 ## Data Flow
 
@@ -158,6 +158,12 @@ gallery request (GET /gallery)
   -> CachingHtmlRenderer.renderImageCard() for each image (uncached)
   -> CachingHtmlRenderer.renderPhotoGrid() wraps cards in masonry fragment
   -> HTMX swaps the initial loading indicator with the photo grid
+
+inspector request (GET /fragment/inspect/{oid})
+  -> store.getIdByOid() maps OID to image ID
+  -> store.listImagesByIds() loads the image state
+  -> CachingHtmlRenderer.renderInspector() renders metadata fragment
+  -> HTMX swaps #inspector-content
 
 image request (GET /image/{oid})
   -> route extracts OID
@@ -211,7 +217,7 @@ JSON index writes use a temp-file-and-rename pattern per file. The store writes 
 - The ingest path uses sequential numeric IDs from `index/next_image_id`.
 - Startup requires `index/next_image_id` to exist with a valid integer >= 1 for `isInitialized()` to return true.
 - `listItems` loads the entire image state into memory; tag intersection is applied in-memory after loading.
-- The gallery page shell is cached by SHA-1 content hash of version, title, and query string.
+- The gallery page shell is cached by SHA-1 content hash of renderer version and gallery input.
 - `applyEvent` reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a correct write-path sequence.
 - `getCursor()` returns the persisted cursor from disk when the in-memory cache is empty.
 
@@ -247,7 +253,7 @@ Git add and commit errors are converted into text HTTP errors inside the server 
 
 ### Gallery page caching
 
-`CachingHtmlRenderer.renderGalleryPage` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Cache identity includes renderer version, page title, and query string. Cache misses render and persist; cache hits return the stored HTML.
+`CachingHtmlRenderer.renderGalleryPage` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Cache identity includes renderer version and gallery input. Cache misses render and persist; cache hits return the stored HTML.
 
 ## Design Tradeoffs
 
@@ -261,7 +267,7 @@ JSON indexes are easy to inspect and require no service dependency. They also re
 
 ### HTMX-driven gallery UI
 
-The gallery uses HTMX for lazy-loaded fragment replacement rather than server-rendered full pages with pagination. This enables a responsive masonry grid but means the initial page load makes a second request for items. Tag filtering loads and filters all image state on the server and sends rendered HTML fragments, which keeps the client simple but sends the full rendered card set.
+The gallery uses HTMX for lazy-loaded fragment replacement rather than server-rendered full pages. This enables a responsive masonry grid and inspector-panel updates but means the initial page load makes a second request for items. Tag filtering loads and filters image state on the server and sends rendered HTML fragments, which keeps the client simple while tying interaction state to server-rendered fragments.
 
 ### Synchronous Git commit in ingest
 
@@ -277,7 +283,7 @@ Returning raw `Response` objects keeps the LFS boundary simple and transparent. 
 
 ### Template-based rendering with caching
 
-The `CachingHtmlRenderer` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Image card rendering and photo grid fragments are not cached at the page level. Gallery page caches are invalidated by version bump or by clearing the artifacts directory.
+The `CachingHtmlRenderer` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Item card, inspector, and photo grid fragments are not cached at the page level. Gallery page caches are invalidated by version bump or by clearing the artifacts directory.
 
 ### Inline handlers over separate module
 
