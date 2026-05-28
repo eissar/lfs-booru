@@ -58,19 +58,11 @@ export type DeleteEvent = {
     id: number;
 };
 
-export type BlobStoredEvent = {
-    op: 'blob_stored';
-    id: number;
-    oid: string;
-};
-
-export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent | BlobStoredEvent;
+export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent;
 
 export type TagIndex = Record<string, string[]>;
 
 export type ImageStateIndex = Record<string, ImageState>;
-
-export type BlobStateIndex = Record<string, true>;
 
 export type IndexResult = {
     images: number;

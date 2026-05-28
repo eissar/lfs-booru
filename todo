@@ -24,6 +24,12 @@ when failing to clone new library
     images/1.thumbnail.jpg ? what file type supports
     incremental loading?
 
+    Manual thumbnail hydration from a pointer:
+    - `git lfs smudge` can hydrate a manually written Git LFS pointer by reading it from stdin and writing bytes to stdout.
+    - Because this library sets `lfs.fetchexclude=*`, plain smudge returns the pointer unchanged; clear the exclude for the command.
+    - Example:
+      `GIT_LFS_SKIP_SMUDGE=0 git -C "$repo" -c lfs.skipSmudge=false -c lfs.fetchexclude= -c lfs.fetchinclude="$path" lfs smudge "$path" < "$repo/$path" > "$tmp"`
+
  5. Replace full index rebuild with incremental indexing
      - Track processed NDJSON segments / offsets.
      - Read only newly appended events.

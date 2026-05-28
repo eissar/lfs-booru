@@ -15,6 +15,7 @@ import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c, isInt } from '@/util.ts';
+import { tryReadPointerSize } from '@/pointer.ts';
 
 const MIN_LIMIT = 10;
 
@@ -227,6 +228,28 @@ function createHandler(
             const url = new URL(req.url);
             const oid = url.pathname.split('/')[2];
 
+            const thumbRelPath = `thumbnails/${oid}.jpg`;
+            const thumbPath = join(lib.path, thumbRelPath);
+            const thumbnail: Deno.FileInfo | false = await Deno.stat(thumbPath)
+                .catch(() => {
+                    return false;
+                });
+            if (thumbnail && thumbnail.isFile) {
+                let bytes = await Deno.readFile(thumbPath);
+
+                // not a pointer, return bytes
+                if (tryReadPointerSize(new TextDecoder('utf-8').decode(bytes)) === false) {
+                    return c.blob(bytes, 'image/jpeg');
+                }
+
+                // if it is a pointer, check it out
+                await simpleGit(lib.path).raw(['lfs', 'pull', '--include', thumbRelPath, '--exclude', '']);
+
+                // and read again
+                bytes = await Deno.readFile(thumbPath);
+                return c.blob(bytes, 'image/jpeg');
+            }
+
             const id = await store.getIdByOid(oid);
             if (!id) return c.error('could not find image by this oid');
 
@@ -234,22 +257,12 @@ function createHandler(
             if (!im) return c.error('could not find image by this oid');
 
             /**  @see https://github.com/git-lfs/git-lfs/blob/release-3.0/docs/spec.md?plain=1#L133-L138 */
-            let localPath = join(lib.path, oid.slice(0, 2), oid.slice(2, 4), oid);
+            // if this file does not exist, the file is definitively *not* checked out.
+            const lfsPath = join(lib.path, '.git', 'lfs', 'objects', oid.slice(0, 2), oid.slice(2, 4), oid);
 
-            if (await store.isBlobStored(oid)) {
-                await simpleGit(lib.path).raw([
-                    'lfs',
-                    'pull',
-                    '--include',
-                    im.path,
-                    '--exclude',
-                    '',
-                ]);
+            await simpleGit(lib.path).raw(['lfs', 'pull', '--include', im.path, '--exclude', '']);
 
-                localPath = join(lib.path, im.path);
-            }
-
-            const bytes = await Deno.readFile(localPath);
+            const bytes = await Deno.readFile(lfsPath);
 
             return c.blob(bytes, im.contentType);
         }
@@ -293,7 +306,10 @@ function createHandler(
 
             const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
                 // pass relative file paths
-                await stageAndCommit([appendResult.path, event.path], `booru: add image ${event.id}`, lib)
+                const paths = [appendResult.path, event.path];
+                if (event.thumbnailOid) paths.push(`thumbnails/${event.thumbnailOid}.jpg`);
+
+                await stageAndCommit(paths, `booru: add image ${event.id}`, lib)
                     .catch((err) => {
                         if (err instanceof TaskConfigurationError || err instanceof GitConstructError) {
                             // we passed invalid or malformed commands, inputs to stageAndCommit

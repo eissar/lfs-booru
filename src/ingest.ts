@@ -196,7 +196,7 @@ export async function ingest(
         );
     }
 
-    const thumbnailPath = join(lib.path, 'thumbnails', `${id}.jpg`);
+    const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.jpg`);
     await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
     await Deno.writeFile(thumbnailPath, thumbnailBytes).catch(() => {
         throw new Error(`Cannot write thumbnail file at "${thumbnailPath}"`);

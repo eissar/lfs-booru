@@ -1,3 +1,5 @@
+import { isInt } from '@/util.ts';
+
 const GIT_LFS_POINTER_SPEC_VERSION = 'version https://git-lfs.github.com/spec/v1';
 
 /**
@@ -18,4 +20,29 @@ export async function writePointerFile(oid: string, size: number, path: string):
     ].join('\n');
     await Deno.writeTextFile(path, pointer);
     return path;
+}
+
+/**
+ * Read the size value from the third line of a Git LFS pointer string.
+ *
+ * @param pointer Git LFS pointer text.
+ * @returns The size value from the third line.
+ */
+export function tryReadPointerSize(pointer: string): number | false {
+    const thirdLine = pointer.split(/\n/)[2];
+    if (thirdLine === undefined) {
+        return false;
+    }
+
+    const match = /^size (\d+)$/.exec(thirdLine);
+    if (match === null) {
+        return false;
+    }
+
+    const size = Number(match[1]);
+    if (!isInt(size)) {
+        return false;
+    }
+
+    return size;
 }

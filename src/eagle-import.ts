@@ -128,7 +128,7 @@ export async function ingestFromEagleSource(
 
     const tempDir = await Deno.makeTempDir({ dir: '/tmp', prefix: 'eagle-import-events-' });
     const preparedEventsPath = `${tempDir}/events.ndjson`;
-    const pointerPaths: string[] = [];
+    const assetPaths: string[] = [];
     const encoder = new TextEncoder();
     let eventCount = 0;
 
@@ -171,7 +171,8 @@ export async function ingestFromEagleSource(
                     bytesWritten += written;
                 }
 
-                pointerPaths.push(event.path);
+                assetPaths.push(event.path);
+                if (event.thumbnailOid) assetPaths.push(`thumbnails/${event.thumbnailOid}.jpg`);
                 eventCount++;
             }
         }
@@ -179,7 +180,7 @@ export async function ingestFromEagleSource(
         if (eventCount === 0) return 0;
 
         const appendResult = await eventLog.appendPreparedFileWithRollback(preparedEventsPath, async (appendResult) => {
-            const paths = Array.from(new Set([appendResult.path, ...pointerPaths]));
+            const paths = Array.from(new Set([appendResult.path, ...assetPaths]));
             await stageAndCommit(paths, `booru: import ${eventCount} eagle items`, lib);
         });
 
