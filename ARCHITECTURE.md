@@ -2,293 +2,275 @@
 
 ## System Overview
 
-The booru prototype is an event-sourced image gallery built around three persistent concerns:
+The booru prototype is a Git-backed media gallery with an event-sourced metadata model.
 
-- **Git LFS** stores immutable image bytes by SHA-256 OID.
-- **Library Git repositories** store Git LFS pointer files and append-only NDJSON metadata events.
-- **Derived JSON indexes** materialize the gallery state used by HTTP reads.
+- Library repositories hold committed metadata event shards and Git LFS-tracked media paths.
+- Git LFS stores original media files and generated JPEG thumbnails as large objects.
+- JSON files under `index/` materialize the gallery read model.
+- The HTTP server performs startup initialization/replay, synchronous ingest, gallery rendering, thumbnail regeneration, and image serving.
 
-The HTTP server combines these concerns for a local prototype. Ingest uploads image bytes to the LFS server, writes repository files, appends an event, commits pointer and event changes, then applies the event to the derived JSON indexes. Reads render gallery HTML from the derived image-state index using HTMX lazy-loaded fragments and proxy image bytes from the LFS server by OID.
+The implementation keeps the source model simple: committed NDJSON events describe metadata state, while media and thumbnail bytes live behind LFS-tracked paths. Derived JSON and HTML artifacts are disposable and rebuildable from committed source files and events.
 
 ## Architectural Goals Implied by the Code
 
-The implementation favors a Git-native, rebuildable data model over a mutable database service:
+The code favors:
 
-- Metadata history is append-only NDJSON.
-- Derived indexes are JSON files produced by replay or by applying committed ingest events.
-- Image content is content-addressed outside the repository through Git LFS.
-- Library repositories remain ordinary Git repositories with `.gitattributes`, `.lfsconfig`, committed pointer files, and committed event shards.
-- Runtime boundaries are simple TypeScript interfaces: `EventLog`, `EventLogReader`, `DerivedIndexStore`, `HtmlRenderer`, `LfsConnection`, and `LibraryConnection`.
-- Server startup detects missing derived artifacts and rebuilds them from scratch, implying that the event log is the authoritative metadata source.
+- append-only metadata history over mutable metadata records
+- ordinary Git repositories as library containers
+- Git LFS for binary storage and lazy hydration
+- simple TypeScript interface boundaries for event logs, derived stores, and renderers
+- local filesystem artifacts that can be inspected and regenerated
+- request handlers that sequence persistence steps explicitly
+- startup checks that rebuild derived state when required artifacts are missing or reset
 
-The code keeps most policies close to the operations they affect. Request handlers validate input, check LFS responses, write files, and convert recoverable request failures into HTTP responses. Replay treats malformed events and filesystem failures as fatal to the replay operation.
+The design accepts coarse file operations and synchronous request work in exchange for transparent storage layout and direct use of Git tooling.
 
 ## Source of Truth
 
-The authoritative metadata model is the event log under `events/`. Events support `add`, `tag_add`, `tag_remove`, and `delete` operations. Replaying those events produces two materialized views:
+### Metadata
 
-- `image_state.json`: image ID to image metadata.
-- `tag_index.json`: tag to image ID list.
+`events/*.ndjson` is the authoritative metadata stream. Events include add, tag add, tag remove, delete, and thumbnail-regeneration operations. Replaying events produces image state and tag indexes.
 
-Image bytes are authoritative in the Git LFS object store. The repository stores pointer files that identify the LFS objects, not hydrated image content.
+`event_cursor` is replay bookkeeping. It records how far the derived index has processed the event log, but it is not authoritative metadata.
 
-`event_cursor` is replay bookkeeping. It records the last processed event position but is not a source of truth — the JSON store loads it from disk when the in-memory cache is empty, and replay correctness depends on the event log, not the cursor.
+### Media bytes
 
-`index/next_image_id` is a write-path allocation file for monotonically increasing, non-contiguous image IDs. It is initialized during `initializeEmptyIndex` and advanced before an ingest event is committed. `processEvents` reconciles `next_image_id` from committed add-event IDs via `applyEvent`, so ID allocation depends on both mutable local state and committed event IDs. Gaps from failed or abandoned ingest attempts are expected and are not a correctness problem.
+Original media files are addressed by SHA-256 OID in add events and stored through Git LFS-tracked `images/{id}.{ext}` paths. Thumbnail bytes are generated as JPEG, addressed by SHA-256 OID, and stored through Git LFS-tracked `thumbnails/{thumbnailOid}.jpg` paths.
+
+### IDs
+
+`index/next_image_id` is the write-path allocator. Add events persist allocated IDs. Replay reconciles the allocator upward from committed add-event IDs, so gaps are allowed and committed events remain the durable record of assigned IDs.
 
 ## Git and Git LFS Responsibilities
 
-Git is used for small-file history and library structure:
+Git records small-file history and path-level changes:
 
-- pointer files under `images/`
-- NDJSON event shards under `events/`
-- repository configuration and placeholders
+- committed `events/*.ndjson` shards
+- committed LFS pointer entries for `images/**` and `thumbnails/**`
+- library configuration inherited from `libraries/template`
 
-Git LFS is used for image bytes:
+Git LFS handles binary storage for paths matched by `.gitattributes`. The application writes media and thumbnail bytes into the working tree, then `git add` lets Git LFS clean those paths into pointer entries and local LFS objects.
 
-- `ingest` computes a SHA-256 OID from uploaded bytes.
-- `PutObjectMeta` registers object metadata.
-- `PutObjectContent` uploads bytes.
-- `GetObjectContent` retrieves bytes for image serving.
+`Init` clones the template with smudge disabled and adds local `lfs.skipSmudge = true`. The template LFS config includes thumbnails and excludes originals for fetches, matching the gallery's preference for available thumbnails and lazy original hydration.
 
-The library `.gitattributes` routes image extensions through LFS filters. `.lfsconfig` points at the configured LFS server URL and sets `fetchexclude = *` so LFS objects are never fetched into the working tree. `Init` clones the template with `GIT_LFS_SKIP_SMUDGE=1`, appends local skip-smudge config, and adds a sample upstream remote.
+Image serving uses Git LFS operationally: it runs `git lfs pull --include ... --exclude ''` for requested paths when needed and reads bytes from either the thumbnail path or the local `.git/lfs/objects` location.
 
 ## Component Boundaries
 
 ### HTTP boundary
 
-`server.ts` owns process startup, CLI flag parsing, route dispatch, static-file serving, and the initial index rebuild check. It constructs the store, event log, and renderer and passes them into `createHandler`.
+`server.ts` owns startup, route matching, request validation, request logging, and high-level write sequencing. It constructs the event log, derived store, and renderer, then passes them into a closure-based handler.
 
-Route dispatch is split into two paths:
-
-- `handleUiRoutes` handles gallery page and HTMX fragment routes (`/gallery`, `/fragment/items`). It uses `DerivedIndexStore.listItems()` for tag-filtered queries and `HtmlRenderer` for HTML rendering.
-- The main handler closure handles ingest, image proxying, static files, root redirect, and 404 fallback.
-
-The HTTP boundary returns raw `Response` objects. It does not use a framework router or domain-specific result wrapper.
+The HTTP boundary returns `Response` objects directly. There is no framework router, result wrapper, or centralized error hierarchy.
 
 ### Ingest boundary
 
-`src/ingest.ts` performs the non-Git preparation work for an add event:
+`ingest()` prepares an add event and the files it references. It reads bytes, hashes content, allocates an ID, detects media type, writes the original file, generates and writes a thumbnail, and returns an event. It does not append the event or commit Git state.
 
-1. Read bytes from a `File` object.
-2. Hash bytes to a SHA-256 OID.
-3. Reserve a numeric image ID from the store.
-4. Upload metadata and content to LFS.
-5. Write the Git LFS pointer file.
-6. Return the `add` event that describes the image.
-
-The server's ingest handler then takes responsibility for source persistence and serving-state update. It serializes write-side Git/event/index work, appends the event with rollback protection around `stageAndCommit`, and applies the same event to the JSON indexes after Git commit succeeds.
-
-LFS upload failures propagate via `cause: Response` and are caught at the handler level to return HTTP 502 or 400 as appropriate.
+The server handler owns the transactional sequence around that prepared event: append to the event log with rollback protection, commit source paths with Git, then apply the event to the derived index.
 
 ### Event-log boundary
 
-`EventLog` is append-oriented. `EventLogReader` is separate so append consumers do not need file-reading semantics. `NdjsonEventLog` is the file-backed implementation and encodes shard selection, cursor seeking, line decoding, JSON parsing, and rollback-safe append behavior.
+`EventLog` is write-oriented and supports rollback-protected appends. `EventLogReader` is read-oriented and exposes cursor-based replay. `NdjsonEventLog` implements both with monthly shard files, process-local append locking, byte-offset cursors, and append rollback by truncation.
 
-`appendWithRollback` is the event-log consistency boundary for ingest. It keeps the event-log mutex held until the protected Git operations complete. If the protected operation fails, it truncates the shard only when the file still ends at the appended event's cursor.
-
-Replay uses `readEvents`, but `processEvents` still checks for the concrete `NdjsonEventLog` class. The public interface has not fully separated replay from the file-backed implementation.
+Prepared-file appends let Eagle import batch many events into one event-log append and one Git commit while preserving NDJSON line format.
 
 ### Derived-index boundary
 
-`DerivedIndexStore` is the storage contract for replay, gallery reads, ID allocation, and post-ingest materialization. `JsonFileIndexStore` implements the contract with JSON files and process-local mutexes.
+`DerivedIndexStore` defines the read model and replay target. `JsonFileIndexStore` stores image state, tag index, cursor, and ID allocator files under the library root.
 
-Replay calls `store.applyEvent` instead of writing files itself. `applyEvent` also reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a consistent monotonic write-path allocator. Gallery rendering calls `store.listItems` with optional tag filtering. Ingest calls `store.allocateImageId`, then later calls `store.applyEvent` after the event has been appended and committed.
-
-The store falls back to loading `event_cursor` from disk when the in-memory cursor cache is null. This means a fresh store instance reads the persisted cursor on first access, unlike the earlier design where the cursor was always null after construction.
-
-### LFS boundary
-
-`src/lfs/api.ts` is a thin fetch wrapper. It constructs URLs from `LfsConnection`, sets Git LFS media-type and authorization headers, and returns raw `Response` objects. It does not centralize retries, response parsing, or rollback policy.
-
-### Git boundary
-
-Git operations are localized to `Init` and `stageAndCommit`. `Init` handles clone and setup. `stageAndCommit` stages selected paths and creates a commit in the library repository. The server handler chooses the staged paths and commit message.
+Replay and post-ingest application use the same `applyEvent` reducer path. Batch import uses `applyEventsFromFile` to apply a prepared NDJSON file and persist only the final cursor after the batch has been applied.
 
 ### Rendering boundary
 
-There are two rendering layers:
+`HtmlRenderer` separates request handling from templates. `CachingHtmlRenderer` caches gallery shell pages by content hash and renders uncached cards, photo-grid fragments, and inspector fragments. Template modules produce HTML strings and use escaping for user-facing values.
 
-- `CachingHtmlRenderer` implements `HtmlRenderer`. It renders individual item cards (uncached), inspector fragments (uncached), gallery pages (cached by content hash under `index/artifacts/gallery-pages`), and photo grid fragments (uncached).
-- Template functions in `src/template/` (`gallery.ts`, `item-card.ts`, `inspector_fragment.ts`, `photo-grid_fragment.ts`) produce escaped HTML strings.
+### Thumbnail boundary
 
-The server handler uses the renderer for all gallery and inspector fragment requests. Item cards include tag links pointing to `/gallery?tags=...` for filtered navigation and HTMX attributes that load `/fragment/inspect/{oid}` into the inspector panel. The gallery page renders an HTMX shell that lazy-loads items from `/fragment/items`.
+`thumbnail.ts` isolates FFmpeg/mediaforge use. Callers provide bytes and a detected extension; the module returns a JPEG blob, OID, and size. The caller chooses where to persist the thumbnail and how to record the thumbnail OID.
+
+### Import boundary
+
+`eagle-import.ts` converts Eagle archive/library data into the same ingest and event-log paths used by HTTP upload. Import-specific concerns are extraction, metadata mapping, temporary prepared-event files, and batch commit.
 
 ## Data Flow
 
-### Startup flow
+### Startup
 
-```
-server process
-  -> parse CLI flags and env vars (cli.ts)
-  -> construct JsonFileIndexStore
-  -> construct NdjsonEventLog
-  -> construct CachingHtmlRenderer
-  -> check derived-index files via isInitialized()
-  -> if incomplete: initializeEmptyIndex() then replay events via processEvents()
-  -> serve HTTP requests on configured port
-```
-
-The startup rebuild check happens after constructing the JSON store. `isInitialized()` checks for `index/next_image_id` (validates its content as an integer >= 1), `index/image_state.json`, and `index/tag_index.json`.
-
-### Ingest flow
-
-```
-client multipart POST /ingest
-  -> request boundary validates image field and tags JSON
-  -> content boundary computes SHA-256 OID
-  -> derived-index boundary reserves next numeric ID
-  -> LFS boundary registers metadata and uploads bytes
-  -> filesystem writes pointer file
-  -> event-log boundary appends add event with rollback protection
-  -> Git boundary stages and commits pointer plus event shard
-  -> derived-index boundary applies the committed event
-  -> HTTP response returns text `ok`
+```text
+parse flags and .env
+  -> initialize or reuse library Git repository
+  -> optionally remove renderer artifacts
+  -> create JSON store, NDJSON event log, and renderer
+  -> initialize/rebuild derived index when requested or incomplete
+  -> optionally import Eagle source through a batched event append
+  -> serve HTTP
 ```
 
-This path is synchronous. The client waits for LFS, filesystem, Git, and JSON-index work before receiving a success response. ID allocation, LFS upload, and pointer writing happen before the event append and Git commit.
+Startup treats missing derived artifacts as rebuildable state. Missing or invalid library initialization dependencies fail through Git, filesystem, or panic paths.
 
-### Image-serving and gallery flow
+### Upload ingest
 
-```
-gallery request (GET /gallery)
-  -> renders gallery HTML shell with HTMX loader
-  -> client-side HTMX requests GET /fragment/items (with optional ?tags= and ?limit=)
-  -> store.listItems() loads full image state, filters by tag intersection
-  -> CachingHtmlRenderer.renderImageCard() for each image (uncached)
-  -> CachingHtmlRenderer.renderPhotoGrid() wraps cards in masonry fragment
-  -> HTMX swaps the initial loading indicator with the photo grid
-
-inspector request (GET /fragment/inspect/{oid})
-  -> store.getIdByOid() maps OID to image ID
-  -> store.listImagesByIds() loads the image state
-  -> CachingHtmlRenderer.renderInspector() renders metadata fragment
-  -> HTMX swaps #inspector-content
-
-image request (GET /image/{oid})
-  -> route extracts OID
-  -> LFS client fetches object content
-  -> upstream response is returned
+```text
+multipart /ingest
+  -> validate image and tags fields
+  -> ingest() writes media and thumbnail files and returns add event
+  -> append add event to NDJSON shard
+  -> git add/commit event shard, media path, thumbnail path
+  -> apply event to derived JSON indexes
+  -> acknowledge success
 ```
 
-The booru does not maintain a blob cache. Image bytes are fetched from the LFS server for each image request.
+The event append is protected by rollback around Git commit. The media and thumbnail writes happen before the event append, so failures later in the flow can leave uncommitted working-tree files or local LFS objects.
 
-### Replay flow
+### Eagle import
 
-```
-startup replay
-  -> choose JSON store and NDJSON event log
-  -> read cursor from store (in-memory cache or from event_cursor file on disk)
-  -> read sorted NDJSON shards from events/
-  -> parse event lines
-  -> apply each event to image and tag state
-  -> write image_state.json, tag_index.json, and event_cursor
-  -> reconcile next_image_id from committed add-event IDs
+```text
+Eagle source
+  -> iterate metadata and bytes
+  -> ingest each item into media/thumbnail files
+  -> write successful add events to a prepared NDJSON file
+  -> append prepared file with rollback around one Git commit
+  -> apply prepared events to derived JSON indexes
 ```
 
-The event reducer mutates in-memory image and tag records. File persistence and cursor advancement belong to the store.
+Import reuses the normal ingest and store application logic, but batches event-log append and Git commit work.
+
+### Gallery reads
+
+```text
+/gallery
+  -> cached gallery shell from renderer
+  -> HTMX requests /fragment/items
+  -> JSON store loads/sorts/filters image state
+  -> renderer creates item-card fragments and photo-grid fragment
+
+/fragment/inspect/{oid}
+  -> derived index maps OID to ID
+  -> renderer creates inspector fragment
+```
+
+The gallery read path depends on derived JSON freshness. It does not replay during ordinary reads.
+
+### Image reads
+
+```text
+/image/{oid}
+  -> serve local thumbnail file if it exists and is hydrated
+  -> hydrate thumbnail pointer with git lfs pull if needed
+  -> otherwise map original OID to image state
+  -> hydrate original image path with git lfs pull
+  -> read local LFS object bytes by OID path
+```
+
+The endpoint trusts the derived index for original OID lookup and trusts Git LFS to hydrate the requested path.
+
+### Thumbnail regeneration
+
+```text
+/regen-thumbnail?oid=...
+  -> map original OID to image state
+  -> read original media path
+  -> generate new JPEG thumbnail
+  -> append regen_thumbnail event with rollback around Git commit
+  -> apply event to update thumbnailOid in image state
+  -> return thumbnail OID and size JSON
+```
+
+The event records only the new thumbnail OID. The thumbnail file path is committed separately through Git.
 
 ## Persistence Model
 
-A library repository contains canonical small-file history and derived local state:
+The library repository separates canonical files from derived files.
 
-```
-events/*.ndjson        canonical metadata events
-images/*               Git LFS pointer files
-index/next_image_id    local monotonic write-path ID allocator
-index/image_state.json derived image state
-index/tag_index.json   derived tag index
-index/artifacts/*      cached rendered HTML artifacts (gallery pages)
-event_cursor           replay checkpoint
-```
+Canonical committed files:
 
-The `index/` directory is ignored by the library repository except for `.gitkeep`, reflecting its role as local derived state. Event shards and pointer files are committed by ingest. `event_cursor` is ignored by the library repository and written beside the index files as replay bookkeeping.
+- `events/*.ndjson`
+- LFS-tracked `images/**`
+- LFS-tracked `thumbnails/**`
+- repository configuration and placeholders from the template
 
-JSON index writes use a temp-file-and-rename pattern per file. The store writes image state, tag index, and cursor in sequence, so the group of files is not atomic as a unit.
+Derived local files:
+
+- `index/image_state.json`
+- `index/tag_index.json`
+- `index/next_image_id`
+- `index/artifacts/**`
+- `event_cursor`
+
+The library `.gitignore` keeps derived files out of commits while allowing placeholders to preserve directories. JSON writes use temp files and rename per target file, but multi-file index updates are not a single transaction.
 
 ## Invariants and Assumptions
 
-- Event replay order is shard-name sort order, then line order within each shard.
-- Image IDs are strings in derived indexes, even when ingest events carry numeric IDs.
-- `add` events carry the full image state needed to materialize the image index.
-- Tag indexes are derived from image state and tag events; they are not canonical.
-- OIDs are SHA-256 hashes of uploaded bytes.
-- Pointer file content is derived from OID and byte size using the Git LFS pointer format.
-- The ingest path uses monotonically increasing numeric IDs from `index/next_image_id`; IDs are intentionally allowed to be non-contiguous.
-- Startup requires `index/next_image_id` to exist with a valid integer >= 1 for `isInitialized()` to return true.
-- `listItems` loads the entire image state into memory; tag intersection is applied in-memory after loading.
-- The gallery page shell is cached by SHA-1 content hash of renderer version and gallery input.
-- `applyEvent` reconciles `next_image_id` from committed add-event IDs, ensuring replay produces a correct monotonic write-path allocator.
-- `getCursor()` returns the persisted cursor from disk when the in-memory cache is empty.
+- Event replay order is lexicographic shard name order followed by line order.
+- Event cursors are byte offsets into shard files immediately after processed lines.
+- Event files are NDJSON with one serialized event per line.
+- Add events contain enough image metadata to rebuild `image_state.json`.
+- Tag indexes are derived from image state and tag events.
+- Thumbnail-regeneration events update only `thumbnailOid` in image state.
+- Original OIDs are SHA-256 hashes of original upload/import bytes.
+- Thumbnail OIDs are SHA-256 hashes of generated JPEG bytes.
+- Image IDs are numeric in events and strings in JSON index keys.
+- ID allocation is monotonic and non-contiguous.
+- `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be initialized.
+- `listItems` uses full-file loading, in-memory sorting, and OR tag matching.
+- Renderer gallery-page cache identity includes renderer version and input filter.
+- Process-local mutexes serialize operations only inside one process and one store/event-log instance.
 
 ## Trust, Error, and Failure Boundaries
 
 ### Request input
 
-The server handler validates that the multipart request includes an `image` file and that `tags` parses as a JSON array of strings. Other metadata fields are accepted as strings or parsed integers with fallback values. Template functions escape names and tags via `@std/html/entities`.
+The ingest handler requires a file field named `image` and parses `tags` as a JSON array of strings. Query parameters for limits, offsets, and sort values are normalized or rejected locally. HTML templates escape names, tags, URLs, and other displayed values where user data is interpolated.
 
-### LFS server
+### Media detection and thumbnails
 
-The LFS client returns fetch responses directly. `ingest` checks `ok` for metadata registration and content upload before writing the pointer file, using `cause: Response` to propagate LFS error details. The server returns the upstream content response without additional validation.
+Media type detection uses magic-byte checks instead of trusting upload filenames. Unsupported inputs fail before events are appended. Thumbnail generation failures surface as request errors; missing FFmpeg is a known explicit error path.
 
-### Filesystem and event parsing
+### Git and Git LFS
 
-Event replay parses each NDJSON line as JSON and lets unexpected parse or filesystem errors fail the replay. Missing `events/` is treated as an empty event set by `NdjsonEventLog.readEvents`.
+Git failures inside protected event-log callbacks trigger event append rollback. Rollback is limited to NDJSON bytes and only succeeds if no later append changed the shard. Git LFS hydration errors during image serving fail the request through thrown command or filesystem errors.
 
-### Derived index consistency
+### Derived-index consistency
 
-Mutexes serialize JSON-store operations within one process and one store instance. They do not provide cross-process locking. A crash or external mutation between writing `image_state.json`, `tag_index.json`, and `event_cursor` can leave the derived files inconsistent. Because metadata truth is the event log, safe recovery is to rebuild derived files from events.
+The event log is safer than derived JSON files. A crash between writing `image_state.json`, `tag_index.json`, `event_cursor`, or `next_image_id` can leave derived state inconsistent. Rebuilding the index from committed events is the recovery path encoded by startup flags and initialization behavior.
 
-`index/next_image_id` is reconciled by `applyEvent` during replay, so losing the sequence file can be recovered by rewriting from committed add-event IDs.
+If a Git commit succeeds and `store.applyEvent` fails, committed source state can be ahead of served JSON indexes. A rebuild reconciles derived state with events.
 
-If `store.applyEvent` fails after a successful Git commit in the ingest handler, the event and pointer can be committed while the served JSON indexes remain stale.
+### Cross-process access
 
-### Cursor semantics
+The file locks are process-local mutexes, not repository locks. Concurrent processes that modify the same library can interleave event, index, or Git operations outside these protections.
 
-`JsonFileIndexStore.getCursor()` returns the in-memory cache when non-null, otherwise falls back to reading `event_cursor` from disk. After `initializeEmptyIndex()` removes the cursor file, `getCursor()` returns null, which signals `readEvents` to start from the beginning. Once events are applied, the cursor is persisted and becomes available on next process start.
+### Import failure
 
-### Git operations
-
-Git add and commit errors are converted into text HTTP errors inside the server handler. The LFS upload and pointer write happen before these Git operations. Event append rollback can remove the appended event line after Git failure, but it does not remove uploaded LFS objects, remove the pointer file, or reset any staged Git index state.
-
-### Gallery page caching
-
-`CachingHtmlRenderer.renderGalleryPage` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Cache identity includes renderer version and gallery input. Cache misses render and persist; cache hits return the stored HTML.
+Eagle import skips individual items whose ingest step throws, writes events only for successful items, and commits a single batch when at least one event was produced. The temporary extraction and prepared-event directories are best-effort removed in `finally` blocks.
 
 ## Design Tradeoffs
 
-### Event log over mutable records
+### Event log over mutable database records
 
-Append-only events make metadata history auditable and derived indexes rebuildable. The tradeoff is that read-serving state depends on replay correctness and index freshness.
+Append-only events make history inspectable and allow derived indexes to be rebuilt. The cost is explicit replay logic, cursor management, and stale-index failure modes.
 
-### JSON files over a database
+### JSON indexes over a database engine
 
-JSON indexes are easy to inspect and require no service dependency. They also require whole-file read/modify/write cycles and coarse in-process locking, which limits write concurrency and large-index performance. `listItems` loads the full image state into memory for tag intersection filtering, which does not scale.
+JSON files keep the prototype easy to inspect and avoid a database dependency. The cost is whole-file reads and writes, coarse process-local locking, and memory-bound listing behavior.
 
-### HTMX-driven gallery UI
+### Git LFS-backed working tree over direct object-store API
 
-The gallery uses HTMX for lazy-loaded fragment replacement rather than server-rendered full pages. This enables a responsive masonry grid and inspector-panel updates but means the initial page load makes a second request for items. Tag filtering loads and filters image state on the server and sends rendered HTML fragments, which keeps the client simple while tying interaction state to server-rendered fragments.
+Writing files into LFS-tracked paths lets normal Git LFS clean/filter behavior own pointer creation and local object storage. The cost is dependence on Git and Git LFS commands during ingest and serving.
 
-### Synchronous Git commit in ingest
+### Synchronous persistence in request handlers
 
-Committing during the request path keeps repository history aligned with acknowledged ingests. It also couples request latency and availability to Git process execution and repository state.
+The upload path acknowledges only after file writes, event append, Git commit, and derived-index application. This keeps acknowledged uploads tied to committed source state, but request latency and availability depend on filesystem, FFmpeg, Git, and index writes.
 
-### Content-addressed blobs with monotonic image IDs
+### Generated thumbnails as committed LFS paths
 
-LFS OIDs provide immutable content addressing. Monotonically increasing image IDs provide short booru-style storage keys and display identifiers. IDs are not required to be contiguous; gaps from failed or abandoned ingest attempts are expected. The cost is that ID allocation depends on a mutable local allocation file.
+Thumbnails are treated as persisted LFS-tracked artifacts and referenced by event metadata. This improves gallery serving and lets clones fetch thumbnails separately from originals, but it adds FFmpeg as an ingest dependency and requires regeneration events when thumbnails change.
 
-### Thin LFS client
+### HTMX fragments with server-rendered HTML
 
-Returning raw `Response` objects keeps the LFS boundary simple and transparent. Callers must inspect status codes and content themselves, and higher-level retry or rollback policy is not centralized.
+The UI keeps client logic small by rendering gallery state on the server and updating fragments with HTMX. This makes filter, pagination, upload, and inspector interactions simple, while coupling UI behavior to server-rendered fragment shape.
 
-### Template-based rendering with caching
+### Partial abstractions
 
-The `CachingHtmlRenderer` uses SHA-1 content hashing for cache identity and stores rendered pages on disk. Item card, inspector, and photo grid fragments are not cached at the page level. Gallery page caches are invalidated by version bump or by clearing the artifacts directory.
-
-### Inline handlers over separate module
-
-Handler logic lives inside `server.ts` rather than a separate `handlers.ts` file. This keeps route dispatch, validation, and persistence sequencing in one place but bundles all request logic into the startup module. `handleUiRoutes` provides partial separation for gallery and fragment routes.
-
-### Partial abstraction adoption
-
-The code contains `EventLog`, `EventLogReader`, and `DerivedIndexStore` boundaries, but replay still checks for `NdjsonEventLog`, meaning alternate event log backends cannot be substituted for replay without changing `processEvents`. Safe changes need to account for these seams until the abstractions cover read and write paths consistently.
+The code defines event-log and store interfaces, but replay still requires the concrete `NdjsonEventLog`. The abstraction seam supports local organization but does not provide backend substitution for replay without changing `processEvents`.

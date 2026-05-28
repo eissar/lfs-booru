@@ -1,301 +1,280 @@
-> Snapshot commit: HASH:5df973e8a5fd8fe293146a172f52c345195b916b
+> Snapshot commit: HASH:7092ac438b7b1b1b4c98140bc6bb51ebbc954d81
 
 # Codebase Snapshot
 
 ## Purpose
 
-A Deno-based booru prototype that stores image bytes in a Git LFS server, stores Git LFS pointer files and metadata event shards in per-library Git repositories, and serves gallery HTML from JSON-derived image indexes. The gallery client uses HTMX for lazy-loaded photo grid fragments and Tailwind CSS for responsive layout.
+A Deno-based booru prototype that stores media files and generated thumbnails in Git LFS-tracked library repositories, records metadata operations as append-only NDJSON event shards, materializes JSON indexes for reads, and serves a gallery UI through server-rendered HTML plus HTMX fragments.
+
+The event log under each library repository is the metadata source of truth. JSON index files, replay cursors, and renderer artifacts are derived local state.
 
 ## Runtime Entry Points
 
-- `server.ts` starts the HTTP server. Run with `deno task run`.
-- `src/indexer.ts` exports `processEvents`, the replay function called during server startup when derived index artifacts are incomplete.
-- `scripts/dump_types.ts` prints the visible TypeScript declaration surface under `src/`.
-- `scripts/read_json_sync_bench.ts` creates `scripts/big.internal.json` if absent and benchmarks synchronous JSON read and parse behavior for a large index-shaped file.
-- `src/test_InitWith5Images.ts` is a self-contained five-image ingestion measurement script that targets a running LFS server at `localhost:8080` and PNG files under `$HOME/example-images`.
+- `server.ts` starts the application server. Run with `deno task run`.
+- `src/indexer.ts` exports `processEvents`, the replay function used during startup when index artifacts are absent or reset.
+- `src/eagle-import.ts` imports an Eagle `.eaglepack` archive or `.library` directory when `--pack` is passed.
+- `scripts/dump_types.ts` prints the TypeScript declaration surface under `src/`.
+- `scripts/render_lint_artifacts.ts` generates representative HTML artifacts for CSS linting.
+- `scripts/find_unused_css.ts` scans CSS selectors against generated artifacts.
+- `scripts/read_json_sync_bench.ts` creates `scripts/big.internal.json` if absent and benchmarks large JSON read/parse behavior.
+- `scripts/smoke_thumbnail.ts` uses Playwright against a running server to check thumbnail error display behavior.
+- `src/test_InitWith5Images.ts` is a self-contained five-image ingestion timing script using files under `$HOME/example-images`.
 
 ## Configuration
 
-`deno.json` defines runtime and lint-artifact tasks and the following import map:
+`deno.json` defines these tasks:
 
 ```json
 {
-    "tasks": {
-        "run": "deno run --allow-all ./server.ts",
-        "lint-artifacts": "deno run --allow-write=.lint-artifacts,app.log scripts/render_lint_artifacts.ts && deno run -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
-    },
-    "imports": {
-        "@std/http": "jsr:@std/http@^1.1.0",
-        "@std/cli": "jsr:@std/cli@1.0.29",
-        "@std/dotenv": "jsr:@std/dotenv@0.225.6",
-        "@std/streams": "jsr:@std/streams",
-        "@std/html": "jsr:@std/html",
-        "@std/path": "jsr:@std/path@1.1.4",
-        "@std/async": "jsr:@std/async@1.3.0",
-        "@std/bytes": "jsr:@std/bytes@^1.0.6",
-        "@core/asyncutil": "jsr:@core/asyncutil",
-        "simple-git": "npm:simple-git@3.36.0",
-        "@/": "./src/"
-    }
+  "run": "deno run --allow-all ./server.ts",
+  "lint-artifacts": "deno run --allow-write=.lint-artifacts,app.log scripts/render_lint_artifacts.ts && deno run -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
 }
 ```
 
-- `npm:typescript@6.0.3` is imported by `scripts/dump_types.ts` through an inline `npm:` specifier.
-- `scripts/find_unused_css.ts` imports PostCSS and selector parser through inline `npm:` specifiers.
-- Formatter settings: 4-space indent, single quotes, 120-column width, excludes Markdown and JSON files.
-- TypeScript strict mode is enabled.
+Relevant import map entries include Deno standard modules, `@core/asyncutil`, `mediaforge`, `simple-git`, `zip-js`, and the `@/` alias for `./src/`. TypeScript strict mode is enabled. Formatter settings use four-space indentation, single quotes, 120-column width, and exclude Markdown and JSON.
 
-CLI flags and environment variables configure runtime settings:
+CLI flags and environment variables:
 
 | Flag | Env var | Default |
 |---|---|---|
-| `--lfsserver` | `BOORU_LFS_SERVER` | `http://localhost:8080` |
-| `--lfsauth` | `BOORU_LFS_AUTH` | `Basic ${btoa('user:pass')}` |
 | `--port` | `BOORU_PORT` | `8000` |
-| `--lib` | `BOORU_LIBRARY` | `$XDG_DOCUMENTS_DIR/Libraries/Default` |
+| `--lib` | `BOORU_LIBRARY` | `$XDG_DOCUMENTS_DIR/Libraries/Default` or `$HOME/Documents/Libraries/Default` |
+| `--pack` | — | unset |
 | `--clear-artifacts` | — | `false` |
+| `--rebuild-index` | — | `false` |
 
-The `.env` file is loaded via `@std/dotenv`.
+`.env` is loaded by `src/cli.ts`. `--lib` and `--pack` support `~/` expansion and are resolved to absolute paths.
+
+The checked-in `libraries/template/.lfsconfig` sets `lfs.url = http://localhost:8080`, includes `thumbnails/**` for LFS fetches, and excludes `images/**` from default fetches. Application code does not expose LFS server URL or authorization flags.
 
 ## Source Structure
 
-```
-server.ts                          HTTP server startup, route dispatch, ingest handler
+```text
+server.ts                         HTTP startup, route dispatch, ingest, image serving, thumbnail regeneration
 src/
-  cli.ts                           CLI flag parsing with env fallback and XDG paths
-  event_log.ts                     EventLog interfaces and NDJSON append/read implementation
-  git.ts                           Library initialization (clone from template) and add/commit helpers
-  html.ts                          Tagged template helper for HTML string construction
-  indexer.ts                       Event replay orchestration and event/index types
-  index_store.ts                   DerivedIndexStore interface and JSON-file implementation
-  ingest.ts                        File hashing, LFS upload, pointer writing, and add-event construction
-  library.ts                       LibraryConnection type alias
-  lfs/
-    api.ts                         Thin Git LFS HTTP client (metadata, content, and HEAD helpers)
-    openapi.json                   Git LFS server OpenAPI reference material
-  logging.ts                       Debug logging helper, console.log override to app.log, Error custom inspect
-  pointer.ts                       Git LFS pointer-file writer
-  renderer.ts                      HtmlRenderer interface with file-backed caching for gallery pages
-  util.ts                          Panic helper, isInt type guard, and HTTP response utility object (c)
-  template/
-    index.ts                       Exports template functions: Gallery, ImageCard, photoGrid, inspector
-    gallery.ts                     Full gallery page HTML template (HTMX, Tailwind CSS, dark mode)
-    item-card.ts                   Item card fragment HTML template
-    inspector_fragment.ts          Inspector fragment HTML template
-    photo-grid_fragment.ts         Photo grid masonry fragment HTML template
+  cli.ts                          CLI/env parsing and path normalization
+  cli.internal.ts                 LFS-oriented flag parser not imported by server.ts
+  eagle-import.ts                 Eagle archive/library import into a batched event append
+  event_log.ts                    EventLog interfaces and NDJSON append/read implementation
+  git.ts                          Library initialization and Git stage/commit helpers
+  html.ts                         Tagged template helper for HTML string construction
+  indexer.ts                      Event types and event replay orchestration
+  index_store.ts                  DerivedIndexStore interface and JSON-file implementation
+  ingest.ts                       Media detection, hashing, file writes, thumbnail generation, add-event construction
+  library.ts                      LibraryConnection type alias
+  logging.ts                      console.log duplication to app.log and debug/trace helpers
+  pointer.ts                      Git LFS pointer helper utilities
+  renderer.ts                     HtmlRenderer interface and file-backed gallery-page cache
+  thumbnail.ts                    FFmpeg/mediaforge thumbnail generation
+  template/                       Gallery page, item card, inspector, and photo-grid templates
 static/
-  gallery.css                      Gallery stylesheet: light/dark theme, masonry grid, component classes
-scripts/
-  dump_types.ts                    Source type-surface dump utility
-  find_unused_css.ts               CSS selector usage scanner for generated artifacts
-  read_json_sync_bench.ts          JSON index-shaped benchmark utility
-  render_lint_artifacts.ts         HTML/CSS artifact generator for stylesheet linting
+  gallery.css                     Theme, masonry grid, inspector, and component styles
+scripts/                          Type dump, CSS lint artifacts/scanner, benchmarks, smoke checks
+libraries/template/               Clone source for user library repositories
 ```
 
 ## Key Modules
 
 ### HTTP server (`server.ts`)
 
-Startup constructs `JsonFileIndexStore`, `NdjsonEventLog`, `CachingHtmlRenderer`, parses CLI flags, loads LFS connection details, and checks `store.isInitialized()`. If index artifacts are missing, it calls `initializeEmptyIndex()` then `processEvents(store, eventLog)` before serving. Routes:
+Startup parses flags, initializes a library repository with `Init`, optionally clears renderer artifacts, creates `JsonFileIndexStore`, `NdjsonEventLog`, and `CachingHtmlRenderer`, initializes or rebuilds derived indexes when requested or incomplete, optionally imports an Eagle source, and serves requests with `Deno.serve`.
+
+Routes:
 
 | Pattern | Method | Behavior |
 |---|---:|---|
-| `/` | any | Redirects to `/gallery` (302) |
-| `/gallery` | any | Renders gallery HTML via `handleUiRoutes` → `renderGalleryPage` |
-| `/fragment/items` | any | Returns photo grid fragment via `handleUiRoutes` → `renderPhotoGrid` (HTMX lazy-load target) |
+| `/` | any | Redirects to `/gallery` with status 302 |
+| `/gallery?q=...` | any | Parses search tokens; `#tag` tokens become repeated `tags` parameters, other tokens become `keyword` |
+| `/gallery` | any | Renders the gallery shell with page-size, sort, filter chips, upload form, and inspector shell |
+| `/fragment/items` | any | Lists images from the derived store and returns a photo-grid fragment |
 | `/fragment/inspect/:oid` | any | Looks up an image by OID and returns the inspector fragment |
-| `/ingest` | POST | Parses multipart form, writes to LFS, appends event with rollback, commits, updates index |
-| `/image/:oid` | any | Proxies raw object content from the LFS server |
-| `/static/*` | any | Serves files from `./static` through `serveDir` |
+| `/ingest` | POST | Parses multipart upload, writes media and thumbnail files, appends and commits an add event, applies the event |
+| `/regen-thumbnail?oid=...` | any | Regenerates a thumbnail, appends and commits a `regen_thumbnail` event, applies the event |
+| `/image/:oid` | any | Serves a thumbnail file when present, otherwise resolves the image by OID and reads the local Git LFS object |
+| `/static/*` | any | Serves files from `./static` |
 | other paths | any | Returns 404 text |
 
-`handleUiRoutes` processes gallery and fragment routes. The gallery page renders an initial loading indicator, then HTMX loads the photo grid from `/fragment/items` on page load. Tag filtering reads tag data via `store.listItems()` with tag intersection filtering.
+Request logging is added by `withLogging`, and `logging.ts` duplicates `console.log` output to `app.log`.
 
 ### Event log (`src/event_log.ts`)
 
-- `EventLog` interface: append-only writes with `append` and `appendWithRollback`.
-- `EventLogReader` interface: read-only replay via `readEvents(cursor?)`.
-- `ReplayableEventLog` interface: extends `EventLog` with `replayFrom(cursor)`. Not implemented by `NdjsonEventLog`.
-- `NdjsonEventLog` implements both `EventLog` and `EventLogReader`. Writes to `events/<yyyy-mm>.ndjson` (monthly shards). Append holds a mutex. `appendWithRollback` truncates the shard on callback failure if no later append changed file size. `readEvents` scans `.ndjson` shards, sorts by name, seeks to cursor, parses each line via `JSON.parse`, and yields `{event, cursor}` pairs.
+`EventLog` supports single-event appends, rollback-protected appends, and rollback-protected prepared NDJSON file appends. `EventLogReader` exposes replay reads. `NdjsonEventLog` writes monthly shards at `events/<yyyy-mm>.ndjson`, uses a process-local mutex for appends, truncates appended bytes on protected-operation failure, and reads sorted `.ndjson` shards from an optional `{eventFile, byteOffset}` cursor.
 
 ### Derived index store (`src/index_store.ts`)
 
-- `DerivedIndexStore` interface: cursor, initialization check, image/oid lookup, event application, ID allocation, listing, stats, close.
-- `JsonFileIndexStore` implements the interface with JSON files and process-local mutexes. Stores under library root:
-  - `index/image_state.json` — `Record<string, ImageState>`
-  - `index/tag_index.json` — `Record<string, string[]>`
-  - `index/next_image_id` — monotonic numeric ID allocator text
-  - `event_cursor` — `{eventFile, byteOffset}` JSON
+`DerivedIndexStore` covers cursor persistence, readiness checks, empty-index creation, image/OID lookups, event application, batch-event application, ID allocation, item listing, stats, and close. `JsonFileIndexStore` stores derived state as JSON files and text files under the library root.
 
-  `getCursor()` returns the in-memory cursor cache when non-null; otherwise it falls back to reading `event_cursor` from disk. `allocateImageId()` increments the file and in-memory allocator under a dedicated mutex. Image IDs are monotonically increasing but intentionally non-contiguous; gaps from failed or abandoned ingest attempts are expected. Writes use a temporary file plus `Deno.rename`. `applyEvent` loads both index files, applies the event reducer, writes image state and tag index, writes the cursor, and updates the in-memory cursor cache. `applyEvent` also reconciles `next_image_id` from committed add-event IDs.
+Important behavior:
 
-  The `applyEventToIndexState` helper handles `add`, `tag_add`, `tag_remove`, `delete` event operations.
-
-  `listItems` performs tag intersection filtering in memory after loading the full image state.
+- `isInitialized()` requires `index/image_state.json`, `index/tag_index.json`, and a valid integer `index/next_image_id`.
+- `initializeEmptyIndex()` creates `images/`, `events/`, and `index/`, writes empty JSON indexes, resets `next_image_id` to `1`, and removes `event_cursor`.
+- `applyEvent()` and `applyEventsFromFile()` update image state, tag index, and cursor. Add events reconcile `next_image_id` from committed IDs.
+- `listItems()` loads all image state, sorts by ID or `addedAt`, filters by tag membership using `some`, applies offset, and yields up to `limit` records.
+- JSON writes use a temporary file followed by `Deno.rename` per file.
 
 ### Indexer (`src/indexer.ts`)
 
-`processEvents(store, eventLog)` requires `eventLog instanceof NdjsonEventLog`. It replays events through `NdjsonEventLog.readEvents(store.getCursor())`, persists each event through `store.applyEvent`, prints aggregate counts, and returns `IndexResult`. Supported event operations: `add`, `tag_add`, `tag_remove`, `delete`.
+The event model includes:
 
-### Server handler and ingest flow (`server.ts`, `src/ingest.ts`)
+- `add`
+- `tag_add`
+- `tag_remove`
+- `delete`
+- `regen_thumbnail`
 
-- `ingest(lib, conn, store, file, tags, name?)` computes SHA-256 OID, reserves ID via `store.allocateImageId()`, uploads metadata and content to LFS (with `cause: Response` error propagation for LFS failures), writes pointer file at `images/{id}.png`, and returns an `add` event.
-- The server's ingest handler parses multipart form inline, calls `ingest`, appends the event with rollback around `stageAndCommit`, applies the event to the derived index, and returns `ok` with status 201.
-- Image proxying extracts OID from `/image/:oid` and returns `GetObjectContent(conn, oid)`.
+`processEvents(store, eventLog)` requires `eventLog instanceof NdjsonEventLog`, reads events from `store.getCursor()`, applies each event through the store, then returns image, tag, and event counts. The `eventFiles` counter is present in the result type but no shard count is populated.
 
-### LFS client (`src/lfs/api.ts`)
+### Ingest (`src/ingest.ts`)
 
-`LfsConnection` type: `{ url, auth, user, repo }`. Exported helpers:
+`ingest()` reads a `File`, computes a SHA-256 OID for the original bytes, reserves an image ID, detects the media extension from magic bytes, derives the content type from extension, writes the original file to `images/{id}.{ext}`, generates a JPEG thumbnail with `generateThumbnail()`, writes it to `thumbnails/{thumbnailOid}.jpg`, and returns an `add` event including `thumbnailOid`.
 
-| Function | Method | Purpose |
-|---|---:|---|
-| `PutObjectMeta` | POST | Register object metadata with `application/vnd.git-lfs+json` |
-| `PutObjectContent` | PUT | Upload raw object content with `application/vnd.git-lfs` |
-| `GetObjectMeta` | GET | Fetch object metadata JSON |
-| `GetObjectContent` | GET | Fetch raw object content, used for image proxying |
-| `HeadObjectMeta` | HEAD | Check object metadata headers |
+Supported detection covers PNG, JPEG, GIF, WebP, AVI, FLV, OGV, MPEG program/video streams, WMV/ASF, ISO base media variants (`mp4`, `mov`, `3gp`, `m4v`, `avif`), and EBML variants (`webm`, `mkv`).
 
-URL helpers use `/{user}/{repo}/objects` when either user or repo is non-empty, otherwise `/objects`.
+### Thumbnailing (`src/thumbnail.ts`)
 
-### Git and pointer files (`src/git.ts`, `src/pointer.ts`)
+Thumbnails are generated through `mediaforge`/FFmpeg. Video inputs use `frameToBuffer` at one second. Image inputs use FFmpeg resizing. Outputs are JPEG blobs sized to `320x320` with quality setting `85`; the thumbnail OID is the SHA-256 digest of the JPEG bytes. Missing FFmpeg is reported with `cannot generate thumbnail - ffmpeg not on PATH`.
 
-- `Init(repoPath)` clones `libraries/template` with `GIT_LFS_SKIP_SMUDGE=1` env var, appends `[lfs] skipSmudge = true` to `.git/config`, and adds an `upstream` remote.
-- `stageAndCommit(paths, message, lib)` runs `git add` and `git commit` through `simple-git`.
-- `writePointerFile(oid, size, path)` writes a Git LFS pointer with version, `oid sha256:...`, and `size N` fields.
+### Eagle import (`src/eagle-import.ts`)
 
-### Renderer (`src/renderer.ts`)
+`openEaglePack()` extracts a `.eaglepack` zip archive to `/tmp` and yields metadata plus bytes from `<id>.info/` directories. `ingestFromEagleSource()` reads either a `.library/images` directory or `.eaglepack` archive, ingests each item, writes events into a prepared NDJSON temp file, appends that prepared file to the source event log with rollback around one Git commit, and applies the prepared events as a batch.
 
-`CachingHtmlRenderer` implements `HtmlRenderer`. It renders item cards via the exported `ImageCard` template, renders inspector fragments, and caches gallery pages under `index/artifacts/gallery-pages` by SHA-1 content hash of the renderer version and gallery input. The `renderPhotoGrid` method renders a photo grid fragment via the `photoGrid` template.
+### Git and library initialization (`src/git.ts`)
 
-### Templates (`src/template/`)
+`Init(repoPath)` is idempotent when `.git` already exists. Otherwise it clones `libraries/template` with `GIT_LFS_SKIP_SMUDGE=1`, appends local `lfs.skipSmudge = true`, and adds an `upstream` remote placeholder. `stageAndCommit(paths, message, lib)` runs `git add` and `git commit` through `simple-git`.
 
-- `gallery.ts`: Full gallery page with HTMX (`htmx.org@2.0.4`), Tailwind CSS (CDN), dark mode toggle, search input, and upload form with drag-and-drop support.
-- `item-card.ts`: Renders an item card with linked thumbnail (`/image/{oid}`), escaped name, dimensions, and tag links.
-- `inspector_fragment.ts`: Renders image metadata for the inspector panel.
-- `photo-grid_fragment.ts`: Renders a `<div id="photo-grid">` with masonry grid class and pagination controls for HTMX fragment replacement.
+### Rendering (`src/renderer.ts`, `src/template/`)
 
-### Static files (`static/gallery.css`)
+`CachingHtmlRenderer` renders item cards, gallery pages, inspector fragments, and photo-grid fragments. Gallery pages are cached under `index/artifacts/gallery-pages` by a SHA-1 hash of renderer version and input filter. Item cards, inspector fragments, and photo-grid fragments are not cached by the renderer.
 
-Full theme system with CSS custom properties for light and dark modes, masonry grid layout (2–5 columns responsive), and reusable component classes. Theme is persisted to `localStorage` and respects `prefers-color-scheme`.
-
-### Logging (`src/logging.ts`)
-
-Overrides `console.log` to write to `app.log` in addition to stdout. Adds `Deno.customInspect` to `Error.prototype` for cleaner inspection output. The `debug` helper accepts values, sync thunks, or async thunks. The `DEBUG` constant gates debug output.
-
-### Utilities (`src/util.ts`)
-
-- `panic(message, code?)`: prints to stderr and exits the process.
-- `isInt`: type guard using `Number.isSafeInteger`.
-- `c`: HTTP response utility object with `json`, `text`, `blob`, `html`, and `error` helpers.
+Templates use HTMX for upload, lazy item loading, pagination, filter chip updates, inspector loading, and thumbnail regeneration. `static/gallery.css` provides light/dark themes, masonry columns, component styles, and inspector layout.
 
 ## Core Flows
 
 ### Server startup
 
-```
+```text
 server.ts
-  -> getFlags() parses CLI flags and env vars
-  -> create JsonFileIndexStore(lib)
-  -> create NdjsonEventLog(lib.path)
-  -> create CachingHtmlRenderer(lib.path)
-  -> store.isInitialized() — checks index/image_state.json, tag_index.json, next_image_id
-  -> if incomplete: initializeEmptyIndex() then processEvents(store, eventLog)
-  -> Deno.serve({ port }, createHandler(store, eventLog, conn, lib, render))
+  -> getFlags()
+  -> Init(library path)
+  -> optionally remove index/artifacts
+  -> create JsonFileIndexStore
+  -> create NdjsonEventLog
+  -> create CachingHtmlRenderer
+  -> if --rebuild-index or store.isInitialized() is false:
+       initializeEmptyIndex()
+       processEvents(store, eventLog)
+  -> if --pack is set:
+       ingestFromEagleSource(...)
+  -> Deno.serve({ port }, withLogging(createHandler(...)))
 ```
 
-### Ingest
+### HTTP ingest
 
-```
+```text
 POST /ingest multipart form
   -> require image file field
-  -> read bytes, compute SHA-256 OID
-  -> parse tags as JSON array of strings
-  -> parse or default width, height, mtime, name
-  -> reserve ID (advance index/next_image_id)
-  -> PUT LFS metadata (PutObjectMeta), PUT LFS content (PutObjectContent)
-  -> write images/{id}.png Git LFS pointer
-  -> append add event to events/{yyyy-mm}.ndjson with rollback around Git operations
-  -> git add pointer + event shard, git commit -m "booru: add image {id}"
-  -> apply event to image_state.json, tag_index.json, event_cursor
-  -> return text `ok`
+  -> parse tags as JSON array of strings, defaulting to []
+  -> call ingest(): hash bytes, reserve ID, detect extension, write media, generate/write thumbnail
+  -> append add event to events/{yyyy-mm}.ndjson with rollback around Git commit
+  -> git add event shard, media file, thumbnail file
+  -> git commit -m "booru: add image {id}"
+  -> store.applyEvent(event, appendResult.cursor)
+  -> return text "ok" with status 201
 ```
 
-### Gallery rendering and image serving
+### Eagle import
 
+```text
+startup with --pack
+  -> read .library/images or extract .eaglepack
+  -> ingest each valid entry into images/ and thumbnails/
+  -> write each add event to a prepared NDJSON temp file
+  -> append the prepared file into the monthly event shard with rollback around Git commit
+  -> git add event shard and all media/thumbnail paths
+  -> store.applyEventsFromFile(...)
 ```
-GET / or GET /gallery
-  -> handleUiRoutes → renderGalleryPage()
-  -> gallery template renders HTMX page with loading indicator
-  -> client-side HTMX requests /fragment/items
-  -> store.listItems() — tag intersection filtered in memory
-  -> render.renderImageCard() for each image
-  -> render.renderPhotoGrid() wraps cards in masonry grid with pagination controls
-  -> HTMX swaps .main-content with photo grid fragment
+
+### Gallery and image serving
+
+```text
+GET /gallery
+  -> render gallery shell and filter controls
+  -> browser HTMX-loads /fragment/items
+  -> store.listItems(limit, offset, tags, sort)
+  -> render item cards and photo-grid fragment
+  -> HTMX swaps grid content
 
 GET /fragment/inspect/{oid}
   -> store.getIdByOid(oid)
   -> store.listImagesByIds([id])
-  -> render.renderInspector()
-  -> HTMX swaps #inspector-content
+  -> render inspector fragment
 
 GET /image/{oid}
-  -> GetObjectContent(conn, oid)
-  -> return upstream LFS response
+  -> if thumbnails/{oid}.jpg exists and is not a pointer, return it
+  -> if thumbnail path is a pointer, run git lfs pull for that path then return it
+  -> otherwise map original OID to image state, run git lfs pull for image path, read .git/lfs/objects/{oid[0:2]}/{oid[2:4]}/{oid}, return bytes
 ```
 
-### Event replay
+### Replay
 
-```
+```text
 processEvents
   -> require NdjsonEventLog
-  -> NdjsonEventLog.readEvents(store.getCursor())
-  -> JSON.parse each NDJSON line
-  -> applyEventToIndexState: add, tag_add, tag_remove, delete
-  -> store.applyEvent(event, nextCursor) — writes image_state.json, tag_index.json, event_cursor
-  -> log stats
+  -> read cursor from JsonFileIndexStore
+  -> read sorted NDJSON shards after the cursor
+  -> JSON.parse each line
+  -> store.applyEvent(event, nextCursor)
+  -> stats()
 ```
 
-## Persistence Layout
+## Persistence
 
-A library repository:
+A library repository created from `libraries/template` contains:
 
-```
+```text
 {library}/
-  .git/                        Git repository metadata
-  .gitattributes               LFS filters for image extensions
-  .gitignore                   Ignores /index/* except .gitkeep, ignores /event_cursor
-  .lfsconfig                   lfs.url = http://localhost:8080, fetchexclude = *
-  events/*.ndjson              NDJSON metadata event shards (monthly)
-  images/*                     Git LFS pointer files
-  index/
-    image_state.json           Derived image state (Record<string, ImageState>)
-    tag_index.json             Derived tag index (Record<string, string[]>)
-    next_image_id              Monotonic write-path ID allocator
-    artifacts/gallery-pages/   Cached HTML renderer output (SHA-1 content-addressable)
-  event_cursor                 Replay checkpoint JSON
+  .git/                         Git repository metadata and local LFS objects
+  .gitattributes                LFS filters for images and thumbnails
+  .gitignore                    Ignores derived index files and event_cursor
+  .lfsconfig                    LFS URL and include/exclude defaults
+  events/.gitkeep
+  events/*.ndjson               Committed metadata event shards
+  images/.gitkeep
+  images/*                      Git LFS-tracked original media files
+  thumbnails/*.jpg              Git LFS-tracked generated JPEG thumbnails
+  index/.gitkeep
+  index/next_image_id           Derived write-path ID allocator
+  index/image_state.json        Derived image state
+  index/tag_index.json          Derived tag index
+  index/artifacts/gallery-pages Cached gallery HTML
+  event_cursor                  Derived replay checkpoint
 ```
 
-`libraries/template` is the clone source with `.gitattributes`, `.gitignore`, `.lfsconfig`, `index/next_image_id`, and `index/.gitkeep` files. The `libraries/` directory is gitignored in the booru project.
+`libraries/`, `.lint-artifacts/`, logs, environment files, and `*.internal.*` are ignored by the application repository.
 
 ## Scripts and Utilities
 
-- `scripts/dump_types.ts` walks `src/`, creates a TypeScript program, and prints declarations for interfaces, type aliases, classes, and function signatures.
-- `scripts/render_lint_artifacts.ts` writes representative template output under `.lint-artifacts/` for stylesheet checks.
-- `scripts/find_unused_css.ts` compares CSS selectors against generated content files and reports selectors whose required classes, IDs, elements, or attributes are absent.
-- `scripts/read_json_sync_bench.ts` creates or reuses `scripts/big.internal.json` for benchmarking synchronous JSON reads. Files matching `*.internal.*` are gitignored.
-- `src/test_InitWith5Images.ts` measures end-to-end ingest timing for 5 PNG images against a running LFS server. Creates a fresh library via `Init`, computes OIDs and PNG dimensions, uploads to LFS, writes pointers, appends events with Git commit, and prints per-image and aggregate timings.
-- `build.internal.sh` is a convenience script that kills the running booru server, removes cached artifacts, and restarts.
+- `scripts/dump_types.ts` builds a TypeScript program over `src/` and prints public declarations plus relevant internal signatures.
+- `scripts/render_lint_artifacts.ts` writes representative gallery, card, and photo-grid HTML under `.lint-artifacts/`.
+- `scripts/find_unused_css.ts` compares CSS selectors against generated content and can fail on possibly unused selectors.
+- `scripts/read_json_sync_bench.ts` measures large JSON index read behavior using `scripts/big.internal.json`.
+- `scripts/smoke_thumbnail.ts` checks that thumbnail-generation failure text reaches the upload result area in the browser.
+- `src/test_InitWith5Images.ts` measures Git/event ingest timing for five PNG files in a fresh local library.
+- `build.internal.sh` sends keystrokes to a tmux pane to restart the server with `--clear-artifacts` and a local library path.
 
 ## Implementation Constraints
 
-- JSON index writes (image state, tag index, cursor) are not committed as a single filesystem transaction.
-- `JsonFileIndexStore.getCursor()` falls back to reading `event_cursor` from disk when the in-memory cache is null, but the cursor file may be absent (e.g., after `initializeEmptyIndex()`).
-- The ingest handler performs LFS upload and pointer-file write before event append and Git commit.
-- The ingest handler reserves an ID before LFS upload and Git operations. Failed ingest attempts can consume IDs; IDs are expected to be monotonic, not contiguous.
-- Event append rollback covers the NDJSON append when Git operations fail. It does not remove the pointer file, LFS object, or staged Git index state.
-- If derived-index application fails after Git commit, source files are committed but served indexes can be stale.
-- Mutexes are process-local and do not protect against other processes modifying the same library files.
-- Image IDs are numeric values stored as string keys in `image_state.json`.
-- `listItems` loads the full image state into memory and filters by tag intersection, which does not scale to large indexes.
-- The gallery page reads initial items via HTMX lazy-load, but `listItems` lacks cursor-based pagination.
-- `console.log` is overridden at module load time to duplicate output to `app.log`.
+- Git and Git LFS command execution are part of the request path for ingest and image serving.
+- Thumbnail generation requires FFmpeg on `PATH` through `mediaforge`.
+- Image serving assumes requested original OIDs can be mapped through the derived image-state index.
+- Event append rollback covers appended NDJSON bytes when the protected Git operation fails; it does not remove media files, thumbnail files, local LFS objects, or staged Git index state.
+- If index application fails after a successful Git commit, committed source files can be ahead of served derived indexes.
+- JSON index writes are per-file atomic but not atomic across `image_state.json`, `tag_index.json`, `event_cursor`, and `next_image_id`.
+- Mutexes are process-local and do not protect library files against other processes.
+- Image IDs are numeric in events and string keys in derived JSON indexes.
+- ID allocation is monotonic and can leave gaps after failed or skipped ingests.
+- `listItems()` loads and sorts the full image-state JSON for each listing call.
+- Tag filtering uses OR semantics across requested tags.
+- The `keyword` search parameter can be produced by `/gallery?q=...`, but item listing does not consume it.
+- `src/pointer.ts` exports pointer helpers, but ingest writes LFS-tracked files directly.
+- `src/cli.internal.ts` is included in the type dump but is not imported by `server.ts`.
