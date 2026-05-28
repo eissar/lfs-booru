@@ -1,5 +1,5 @@
 import { serveDir } from '@std/http/file-server';
-import { join } from '@std/path';
+import { dirname, join } from '@std/path';
 
 import { GitConstructError, GitError, simpleGit, TaskConfigurationError } from 'simple-git';
 
@@ -8,7 +8,7 @@ import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
-import { AddEvent, processEvents } from '@/indexer.ts';
+import { AddEvent, processEvents, type RegenThumbnailEvent } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
@@ -16,6 +16,7 @@ import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
+import { generateThumbnail } from '@/thumbnail.ts';
 
 const MIN_LIMIT = 10;
 
@@ -50,6 +51,37 @@ export const itemSortParameterMap: Record<string, ItemSort> = {
     'addedAtAsc': { field: 'addedAt', direction: 1 },
     'addedAtDesc': { field: 'addedAt', direction: -1 },
 };
+
+export async function reloadThumbnail(
+    lib: LibConn,
+    store: DerivedIndexStore,
+    oid: string,
+    fileExtension: string,
+): Promise<{ oid: string; size: number }> {
+    // Read the original media file bytes.
+    const id = await store.getIdByOid(oid);
+    if (!id) throw new Error(`Could not find image id for oid "${oid}"`);
+
+    const image = await store.getImage(String(id));
+    if (!image) throw new Error(`Could not find image state for id "${id}"`);
+
+    const mediaPath = join(lib.path, image.path);
+    const bytes = await Deno.readFile(mediaPath);
+
+    // Generate a fresh thumbnail.
+    const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } = await generateThumbnail(
+        bytes,
+        fileExtension,
+    );
+
+    // Write the new thumbnail.
+    const thumbnailBytes = new Uint8Array(await thumbnailBlob.arrayBuffer());
+    const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.jpg`);
+    await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
+    await Deno.writeFile(thumbnailPath, thumbnailBytes);
+
+    return { oid: thumbnailOid, size: thumbnailSize };
+}
 
 /**
  * Convert an item filter to URL search parameters.
@@ -338,6 +370,49 @@ function createHandler(
             if (applyResult instanceof Response) return applyResult;
 
             return c.text('ok', 201);
+        }
+
+        if (url.pathname === '/regen-thumbnail') {
+            debug(url);
+            const oid = url.searchParams.get('oid') as string | null;
+            if (!oid) return c.error('missing form field: oid', 400);
+
+            const id = await store.getIdByOid(oid);
+            if (!id) return c.error(`Could not find image id for oid "${oid}"`, 404);
+
+            const image = await store.getImage(String(id));
+            if (!image) return c.error(`Could not find image state for id "${id}"`, 404);
+
+            const fileExtension = image.path.split('.').pop() ?? 'jpg';
+            const { oid: thumbnailOid, size: thumbnailSize } = await reloadThumbnail(
+                lib,
+                store,
+                oid,
+                fileExtension,
+            );
+
+            const event: RegenThumbnailEvent = {
+                op: 'regen_thumbnail',
+                id: Number(id),
+                thumbnailOid,
+            };
+
+            const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+                const paths = [`thumbnails/${thumbnailOid}.jpg`];
+                await stageAndCommit(paths, `booru: regenerate thumbnail ${id}`, lib);
+            }).catch((err: unknown) => {
+                if (err instanceof Response) return err;
+                return c.error(`regen-thumbnail failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+            });
+
+            if (appendResult instanceof Error) return c.error('error during event writing.', 500);
+            if (appendResult instanceof Response) return appendResult;
+
+            const applyResult = await store.applyEvent(event, appendResult.cursor)
+                .catch(() => c.error('ERROR: could not apply event'));
+            if (applyResult instanceof Response) return applyResult;
+
+            return c.json({ oid: thumbnailOid, size: thumbnailSize });
         }
 
         if (url.pathname.startsWith('/static')) {

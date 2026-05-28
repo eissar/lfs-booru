@@ -9,6 +9,9 @@ import type { ImageState } from '@/indexer.ts';
  * @returns Inspector details HTML fragment.
  */
 export default function inspector(image: ImageState): string {
+    let thumbSrc = `/image/${image.oid}`; // use the image itself as a fallback?
+    if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
+
     const tags = image.tags.map((tag) => {
         const params = new URLSearchParams();
         params.append('tags', tag);
@@ -23,8 +26,9 @@ export default function inspector(image: ImageState): string {
 
     return html`
         <section class="space-y-4">
+            <input type="hidden" name="oid" value="${escape(image.oid)}">
             <img
-                src="/image/${escape(image.oid)}"
+                src="${thumbSrc}"
                 alt="${escape(image.name)}"
                 class="aspect-square w-full rounded-lg object-cover"
             >
@@ -53,7 +57,9 @@ export default function inspector(image: ImageState): string {
             <div>
                 <h4 class="mb-2 text-sm font-medium">Tags</h4>
                 <div class="flex flex-wrap gap-2">
-                    ${tags || html`<span class="text-xs" style="color: var(--text-muted);">No tags</span>`}
+                    ${tags || html`
+                        <span class="text-xs" style="color: var(--text-muted);">No tags</span>
+                    `}
                 </div>
             </div>
         </section>

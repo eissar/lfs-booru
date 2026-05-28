@@ -80,11 +80,29 @@ function renderInspectorShell(): string {
                         <h2 class="truncate text-sm font-semibold">Inspector</h2>
                         <p class="text-xs" style="color: var(--text-muted);">Image details</p>
                     </div>
-                    <button
-                        type="button"
-                        class="inspector-close rounded px-2 py-1 text-sm font-medium hover-surface"
-                        onclick="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
-                    >×</button>
+                    <div class="ml-auto flex items-center gap-1">
+                        <button
+                            type="button"
+                            id="inspector-header-refresh"
+                            hx-get="/regen-thumbnail"
+                            hx-include="#inspector-content input[name=oid]"
+                            hx-target="#inspector-content"
+                            hx-swap="innerHTML"
+                            class="rounded p-1 hover-surface"
+                        >
+                            <img
+                                src="https://unpkg.com/heroicons@2.0.18/24/outline/arrow-path.svg"
+                                class="h-4 w-4"
+                                style="filter: var(--icon-filter);"
+                                alt="Refresh"
+                            >
+                        </button>
+                        <button
+                            type="button"
+                            class="inspector-close rounded px-2 py-1 text-sm font-medium hover-surface"
+                            onclick="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
+                        >×</button>
+                    </div>
                 </header>
                 <div id="inspector-content" class="inspector-body min-h-0 flex-1 overflow-y-auto"
                    hx-on::after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')">

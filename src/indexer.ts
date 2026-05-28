@@ -58,7 +58,13 @@ export type DeleteEvent = {
     id: number;
 };
 
-export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent;
+export type RegenThumbnailEvent = {
+    op: 'regen_thumbnail';
+    id: number;
+    thumbnailOid: string;
+};
+
+export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent | RegenThumbnailEvent;
 
 export type TagIndex = Record<string, string[]>;
 

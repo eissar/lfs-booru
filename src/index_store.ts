@@ -598,5 +598,11 @@ function applyEventToIndexState(
             delete imageState[id];
             break;
         }
+        case 'regen_thumbnail': {
+            const img = imageState[id];
+            if (!img) break;
+            img.thumbnailOid = event.thumbnailOid;
+            break;
+        }
     }
 }
