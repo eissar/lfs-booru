@@ -1,7 +1,7 @@
 {
     "tasks": {
         "run": "deno run --allow-all ./server.ts",
-        "lint-artifacts": "deno run --allow-write=.lint-artifacts,app.log scripts/render_lint_artifacts.ts && deno run -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
+        "lint-artifacts": "deno run --allow-all scripts/render_lint_artifacts.ts && deno run --no-lock -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
     },
     "fmt": {
         "exclude": [

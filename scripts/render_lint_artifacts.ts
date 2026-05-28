@@ -1,6 +1,6 @@
 import { escape } from '@std/html/entities';
 import { join } from '@std/path';
-import type { GalleryImage } from '@/renderer.ts';
+import { CachingHtmlRenderer, type GalleryImage } from '@/renderer.ts';
 import { template } from '@/template/index.ts';
 
 const args = Deno.args[0] === '--' ? Deno.args.slice(1) : Deno.args;
@@ -38,7 +38,8 @@ await Deno.remove(outputDirectory, { recursive: true }).catch((error) => {
 });
 await Deno.mkdir(outputDirectory, { recursive: true });
 
-const cards = sampleImages.map((image) => template.fragment.ImageCard(image, renderTagLinks(image.tags))).join('\n');
+const renderer = new CachingHtmlRenderer(outputDirectory, { version: 'lint-artifact' });
+const cards = (await Promise.all(sampleImages.map((image) => renderer.renderImageCard(image)))).join('\n');
 const populatedPhotoGrid = template.fragment.photoGrid(cards, String(sampleImages.length), true);
 const emptyPhotoGrid = template.fragment.photoGrid('', '0', false);
 const galleryPage = template.page.Gallery('Lint gallery', 'lint-artifact', {
@@ -46,9 +47,11 @@ const galleryPage = template.page.Gallery('Lint gallery', 'lint-artifact', {
     offset: 0,
     tags: ['landscape', 'blue sky'],
 });
+const populatedGalleryPage = replaceInitialPhotoGrid(galleryPage, populatedPhotoGrid);
 
 const artifacts = new Map<string, string>([
     ['gallery.html', galleryPage],
+    ['gallery.populated.html', populatedGalleryPage],
     ['image-card.fragment.html', cards],
     ['photo-grid.fragment.html', populatedPhotoGrid],
     ['photo-grid.empty.fragment.html', emptyPhotoGrid],
@@ -66,26 +69,34 @@ for (const [name, content] of artifacts) {
 
 console.log(`Wrote ${artifacts.size} lint artifacts to ${outputDirectory}`);
 
-function renderTagLinks(tags: string[]): string {
-    return tags.map((tag) => {
-        const search = new URLSearchParams();
-        search.append('tags', tag);
-        const tagUrl = `/gallery?${search.toString()}`;
+function replaceInitialPhotoGrid(page: string, photoGrid: string): string {
+    const startMarker = '<div id="photo-grid" class="masonry-grid">';
+    const start = page.indexOf(startMarker);
+    if (start === -1) throw new Error('Cannot replace initial photo grid: start marker is missing');
 
-        return `<a class="image-card-tags" href="${escape(tagUrl)}">${escape(tag)}</a>`;
-    }).join('\n');
+    const sectionEnd = page.indexOf('</section>', start);
+    if (sectionEnd === -1) throw new Error('Cannot replace initial photo grid: section end is missing');
+
+    const end = page.lastIndexOf('</div>', sectionEnd);
+    if (end === -1 || end < start) throw new Error('Cannot replace initial photo grid: grid end is missing');
+
+    return `${page.slice(0, start)}${photoGrid.trim()}${page.slice(end + '</div>'.length)}`;
 }
 
 function wrapHtmlDocument(title: string, body: string): string {
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>${escape(title)}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <link href="../static/gallery.css" rel="stylesheet">
     </head>
-    <body>
+    <body data-renderer-version="lint-artifact">
         ${body}
     </body>
 </html>
