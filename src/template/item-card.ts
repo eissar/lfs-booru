@@ -20,8 +20,8 @@ export default function itemCard(image: GalleryImage, tags: string): string {
     return html`
         <!-- TODO: add data-tags -->
         <article class="masonry-item group" data-image-id="${escape(image.id)}">
-            <div class="relative overflow-hidden flex flex-col rounded-lg hover-card">
-                <div class="block p-4 w-full peer order-2">
+            <div class="gallery-card relative overflow-hidden flex flex-col rounded-lg hover-card">
+                <div class="gallery-card-meta block p-4 w-full peer order-2">
                     <a href="${imageSrc}">
                         <span class="font-medium truncate">${imageName}</span>
                     </a>
@@ -39,7 +39,7 @@ export default function itemCard(image: GalleryImage, tags: string): string {
                     hx-get="${imageInspect}"
                     hx-target="#inspector-content"
                     hx-swap="innerHTML"
-                    class="transition-transform duration-300 peer-hover:scale-105 order-1"
+                    class="gallery-card-image transition-transform duration-300 peer-hover:scale-105 order-1"
                 />
             </div>
         </article>

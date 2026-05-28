@@ -34,31 +34,31 @@ export default function inspector(image: ImageState): string {
             >
             <div class="space-y-1">
                 <h3 class="text-sm font-semibold break-words">${escape(image.name)}</h3>
-                <p class="text-xs" style="color: var(--text-muted);">${escape(`${image.width} × ${image.height}`)}</p>
+                <p class="text-xs text-muted">${escape(`${image.width} × ${image.height}`)}</p>
             </div>
             <dl class="space-y-3 text-sm">
                 <div>
                     <dt class="font-medium">OID</dt>
-                    <dd class="text-xs break-all" style="color: var(--text-muted);">${escape(image.oid)}</dd>
+                    <dd class="text-xs break-all text-muted">${escape(image.oid)}</dd>
                 </div>
                 <div>
                     <dt class="font-medium">Path</dt>
-                    <dd class="text-xs break-all" style="color: var(--text-muted);">${escape(image.path)}</dd>
+                    <dd class="text-xs break-all text-muted">${escape(image.path)}</dd>
                 </div>
                 <div>
                     <dt class="font-medium">Added</dt>
-                    <dd class="text-xs" style="color: var(--text-muted);">${escape(image.addedAt)}</dd>
+                    <dd class="text-xs text-muted">${escape(image.addedAt)}</dd>
                 </div>
                 <div>
                     <dt class="font-medium">Modified</dt>
-                    <dd class="text-xs" style="color: var(--text-muted);">${escape(image.mtime)}</dd>
+                    <dd class="text-xs text-muted">${escape(image.mtime)}</dd>
                 </div>
             </dl>
             <div>
                 <h4 class="mb-2 text-sm font-medium">Tags</h4>
                 <div class="flex flex-wrap gap-2">
                     ${tags || html`
-                        <span class="text-xs" style="color: var(--text-muted);">No tags</span>
+                        <span class="text-xs text-muted">No tags</span>
                     `}
                 </div>
             </div>

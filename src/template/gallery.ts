@@ -78,7 +78,7 @@ function renderInspectorShell(): string {
                 <header class="inspector-header shrink-0">
                     <div class="min-w-0">
                         <h2 class="truncate text-sm font-semibold">Inspector</h2>
-                        <p class="text-xs" style="color: var(--text-muted);">Image details</p>
+                        <p class="text-xs text-muted">Image details</p>
                     </div>
                     <div class="ml-auto flex items-center gap-1">
                         <button
@@ -106,7 +106,7 @@ function renderInspectorShell(): string {
                 </header>
                 <div id="inspector-content" class="inspector-body min-h-0 flex-1 overflow-y-auto"
                    hx-on::after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')">
-                    <p class="text-sm" style="color: var(--text-muted);">Select an image to inspect it.</p>
+                    <p class="text-xs text-muted">Select an image to inspect it.</p>
                 </div>
             </div>
         </aside>
@@ -191,6 +191,25 @@ export default function gallery(
                         }
                     });
                 });
+
+                document.addEventListener('DOMContentLoaded', function () {
+                    const viewInputs = document.querySelectorAll('input[name="gallery-view"]');
+                    const views = new Set(['masonry', 'grid', 'list']);
+                    const requestedView = new URLSearchParams(window.location.search).get('view');
+                    if (requestedView && views.has(requestedView)) {
+                        const selected = document.getElementById('gallery-view-' + requestedView);
+                        if (selected instanceof HTMLInputElement) selected.checked = true;
+                    }
+
+                    viewInputs.forEach(function (input) {
+                        input.addEventListener('change', function () {
+                            if (!(input instanceof HTMLInputElement) || !input.checked) return;
+                            const nextUrl = new URL(window.location.href);
+                            nextUrl.searchParams.set('view', input.value);
+                            window.history.replaceState(null, '', nextUrl);
+                        });
+                    });
+                });
                 </script>
             </head>
             <body data-renderer-version="${escapedVersion}" class="antialiased">
@@ -201,25 +220,54 @@ export default function gallery(
                 >
                     <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div class="flex items-center justify-between h-16">
+                                <div class="gallery-view-controls" aria-label="Gallery view">
+                                    <input
+                                        class="gallery-view-input"
+                                        type="radio"
+                                        name="gallery-view"
+                                        id="gallery-view-masonry"
+                                        value="masonry"
+                                        checked
+                                    >
+                                    <input
+                                        class="gallery-view-input"
+                                        type="radio"
+                                        name="gallery-view"
+                                        id="gallery-view-grid"
+                                        value="grid"
+                                    >
+                                    <input
+                                        class="gallery-view-input"
+                                        type="radio"
+                                        name="gallery-view"
+                                        id="gallery-view-list"
+                                        value="list"
+                                    >
+                                    <label class="gallery-view-label" for="gallery-view-masonry">Masonry</label>
+                                    <label class="gallery-view-label" for="gallery-view-grid">Grid</label>
+                                    <label class="gallery-view-label" for="gallery-view-list">List</label>
+                                </div>
+
+
                             <div class="flex items-center gap-4 text-sm flex-1 min-w-0 justify-end">
                                 <form
                                     id="search-form"
                                     method="get"
                                     action="/gallery"
-                                    class="flex items-center gap-2 w-full max-w-xs flex-shrink-0"
+                                    class="flex items-center h-10 gap-2 w-full max-w-xs flex-shrink-0"
                                 >
                                     <input
                                         id="search-input"
                                         type="search"
                                         name="q"
                                         placeholder="Search..."
-                                        class="block w-full border border-transparent rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-transparent input-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 focus-visible:border-transparent"
+                                        class="block w-full h-full border border-transparent rounded-lg px-4 input-field"
                                         required
                                     >
                                     ${hiddenTagInputs}
                                     <button
                                         type="submit"
-                                        class="py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                        class="h-full px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                     >
                                         Search
                                     </button>
@@ -348,7 +396,7 @@ export default function gallery(
                                                 name="image"
                                                 id="file-input"
                                                 class="
-                                                    block w-full text-sm text-gray-500
+                                                    block w-full text-sm text-muted
                                                     file:mr-4 file:py-2 file:px-4
                                                     file:rounded file:border-0
                                                     file:text-sm file:font-medium
@@ -390,6 +438,7 @@ export default function gallery(
                                         hx-target="#photo-grid"
                                         hx-swap="outerHTML"
                                         hx-include="#filter-bar,#preferences,#pagination-controls"
+                                        class="gallery-status gallery-loading"
                                     >
                                         Loading initial content...
                                     </div>

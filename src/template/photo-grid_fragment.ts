@@ -24,7 +24,9 @@ function renderLoadMoreButton(offset: string, hasMore: boolean): string {
     return html`
         <div id="pagination-controls" class="px-1 pb-1">
             <input type="hidden" name="offset" value="${nextOffset}">
-            No More to Show <span class="text-sm opacity-80">(showing ${nextOffset})</span>
+            <div role="status" class="gallery-status gallery-pagination-status">
+                No more to show <span class="ml-1 text-sm opacity-80">(showing ${nextOffset})</span>
+            </div>
         </div>
     `;
 }
