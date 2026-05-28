@@ -6,6 +6,7 @@ import { LibraryConnection as LibConn } from './library.ts';
 import { startsWith } from '@std/bytes';
 import { dirname, join } from '@std/path';
 import { generateThumbnail } from './thumbnail.ts';
+import { typeByExtension } from '@std/media-types';
 
 const MAGIC_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MAGIC_JPEG = new Uint8Array([0xff, 0xd8, 0xff]);
@@ -166,6 +167,8 @@ export async function ingest(
     const fileExtension = detectMediaFileExtension(bytes);
     if (!fileExtension) throw new Error('Cannot detect supported media type');
 
+    const contentType = typeByExtension(fileExtension) ?? 'application/octet-stream';
+
     const event: AddEvent = {
         op: 'add',
         id: id,
@@ -177,6 +180,7 @@ export async function ingest(
         name,
         mtime,
         addedAt: new Date().toISOString(),
+        contentType,
     };
 
     // NOTE: make sure to set cause:res when making lfs-server requests

@@ -23,6 +23,7 @@ export type ImageState = {
     name: string;
     mtime: string;
     addedAt: string;
+    contentType: string;
 };
 
 export type AddEvent = {
@@ -37,6 +38,7 @@ export type AddEvent = {
     name: string;
     mtime: string;
     addedAt: string;
+    contentType: string;
 };
 
 export type TagAddEvent = {

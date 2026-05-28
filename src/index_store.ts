@@ -565,6 +565,7 @@ function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex,
                 name: event.name,
                 mtime: event.mtime,
                 addedAt: event.addedAt,
+                contentType: event.contentType,
             };
             imageState[id] = img;
             for (const tag of img.tags) addToTag(tagIndex, tag, id);
