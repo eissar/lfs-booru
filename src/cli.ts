@@ -5,8 +5,6 @@ import { panic } from './util.ts';
 
 // constants
 const DEFAULT_PORT = '8000';
-const DEFAULT_LFS_SERVER = 'http://localhost:8080';
-const DEFAULT_LFS_AUTH = `Basic ${btoa('user:pass')}`;
 // load env
 await load({ envPath: '.env', export: true });
 const HOME = Deno.env.get('HOME') || Deno.env.get('USERPROFILE');
@@ -45,10 +43,6 @@ export function mustGetEnv(name: string): string {
  * Parsed command-line flags for the application.
  */
 export interface CliFlags {
-    /** @default http://localhost:8080 */
-    lfsserver: string;
-    /** @default `Basic ${btoa('user:pass')}` */
-    lfsauth: string;
     /** @default 8000 */
     port: number;
     /** path to the library */
@@ -70,8 +64,6 @@ function parsePort(port: string): number {
 }
 
 const flagDefaults = {
-    'lfsserver': DEFAULT_LFS_SERVER,
-    'lfsauth': DEFAULT_LFS_AUTH,
     'port': DEFAULT_PORT,
     'lib': DEFAULT_BOORU_LIBRARY_PATH,
     'pack': undefined as string | undefined,
@@ -95,8 +87,6 @@ export function getFlags(): CliFlags {
     });
 
     // fallback values if a flag is unset
-    const lfsserver = Deno.env.get('BOORU_LFS_SERVER') ?? flagDefaults.lfsserver;
-    const lfsauth = Deno.env.get('BOORU_LFS_AUTH') ?? flagDefaults.lfsauth;
     const port = Deno.env.get('BOORU_PORT') ?? flagDefaults.port;
     let lib = Deno.env.get('BOORU_LIBRARY') ?? flagDefaults.lib;
     // optional ,no fallback
@@ -122,8 +112,6 @@ export function getFlags(): CliFlags {
     }
 
     return {
-        lfsserver: flags.lfsserver ?? lfsserver,
-        lfsauth: flags.lfsauth ?? lfsauth,
         port: parsePort(flags.port ?? port),
         lib,
         pack: pack || undefined,

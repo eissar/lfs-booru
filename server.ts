@@ -1,7 +1,7 @@
 import { serveDir } from '@std/http/file-server';
 import { join } from '@std/path';
 
-import { GitConstructError, GitError, TaskConfigurationError } from 'simple-git';
+import { GitConstructError, GitError, simpleGit, TaskConfigurationError } from 'simple-git';
 
 import { getFlags } from '@/cli.ts';
 import type { EventLog } from '@/event_log.ts';
@@ -11,7 +11,6 @@ import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/
 import { AddEvent, processEvents } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
-import { GetObjectContent, LfsConnection as LfsConn } from '@/lfs/api.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
@@ -200,7 +199,6 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
 function createHandler(
     store: DerivedIndexStore,
     eventLog: EventLog,
-    conn: LfsConn,
     lib: LibConn,
     render: HtmlRenderer,
 ): (req: Request) => Promise<Response> {
@@ -211,10 +209,49 @@ function createHandler(
             `[request] method=${req.method} path=${url.pathname} query=${url.search}`,
         );
 
+        /**
+         * @
+         * when we run git add, the file is moved to .git/lfs/objects:
+         * > large files aren't written into the repository proper,
+         * >instead being stored locally at `.git/lfs/objects/{OID-PATH}`
+         *  @see https://github.com/git-lfs/git-lfs/blob/release-3.0/docs/spec.md?plain=1#L133-L138
+         *  as `OID[0:2]/OID[2:4]/OID`, example:
+         *
+         * @example .git/lfs/objects/4d/7a/4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393
+         *
+         * and the object is not pushed to lfs remotes until a git push is called
+         * we run git push asynchronously, so if an image was recently uploaded,
+         * that file may not be available with git
+         */
         if (url.pathname.startsWith('/image/')) {
             const url = new URL(req.url);
             const oid = url.pathname.split('/')[2];
-            return await GetObjectContent(conn, oid);
+
+            const id = await store.getIdByOid(oid);
+            if (!id) return c.error('could not find image by this oid');
+
+            const im = await store.getImage(id);
+            if (!im) return c.error('could not find image by this oid');
+
+            /**  @see https://github.com/git-lfs/git-lfs/blob/release-3.0/docs/spec.md?plain=1#L133-L138 */
+            let localPath = join(lib.path, oid.slice(0, 2), oid.slice(2, 4), oid);
+
+            if (await store.isBlobStored(oid)) {
+                await simpleGit(lib.path).raw([
+                    'lfs',
+                    'pull',
+                    '--include',
+                    im.path,
+                    '--exclude',
+                    '',
+                ]);
+
+                localPath = join(lib.path, im.path);
+            }
+
+            const bytes = await Deno.readFile(localPath);
+
+            return c.blob(bytes, im.contentType);
         }
 
         if (url.pathname === '/') {
@@ -243,15 +280,11 @@ function createHandler(
 
             const name = form.get('name') as string;
 
-            const event: AddEvent | Response = await ingest(lib, conn, store, file, tags, name)
+            const event: AddEvent | Response = await ingest(lib, store, file, tags, name)
                 .catch((e) => {
                     if (e.cause instanceof Response) {
                         // upstream error
                         // we can match url, path here if we want later.
-                        // if (new URL(e.cause.url).origin === conn.url)
-                        //
-                        // for now only upstream with cause:response is lfs-server
-                        // errors
                         return c.error(e.message, 502);
                     }
                     return c.error(e.message, 400);
@@ -334,13 +367,6 @@ async function Start() {
     // todo: process flags
     const cfg = getFlags();
 
-    const conn: LfsConn = {
-        url: cfg.lfsserver,
-        auth: cfg.lfsauth,
-        user: 'USER',
-        repo: 'REPO',
-    };
-
     const lib: LibConn = { path: cfg.lib };
 
     // idempotent
@@ -364,7 +390,7 @@ async function Start() {
 
     // todo: end process flags
 
-    debug(`library=${lib.path} LFS_SERVER=${cfg.lfsserver}`);
+    debug(`library=${lib.path}`);
 
     // TODO:
     // if (indexFlag) console.log('Attempting re-index from last checkpoint')
@@ -379,11 +405,11 @@ async function Start() {
 
     if (cfg.pack) {
         console.log(`Importing Eagle pack: ${cfg.pack}`);
-        const count = await ingestFromEagleSource(lib, conn, store, eventLog, cfg.pack);
+        const count = await ingestFromEagleSource(lib, store, eventLog, cfg.pack);
         console.log(`✅ Imported ${count} items from ${cfg.pack}`);
     }
 
-    const h = createHandler(store, eventLog, conn, lib, render);
+    const h = createHandler(store, eventLog, lib, render);
 
     Deno.serve({ port: cfg.port }, withLogging(h));
 }

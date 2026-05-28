@@ -1,6 +1,6 @@
 import { dirname, join } from '@std/path';
 import { TextLineStream } from '@std/streams';
-import type { Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
+import type { BlobStateIndex, Event, ImageState, ImageStateIndex, TagIndex } from '@/indexer.ts';
 import type { LibraryConnection } from './library.ts';
 import { Mutex } from '@core/asyncutil/mutex';
 import { isInt } from '@/util.ts';
@@ -69,6 +69,8 @@ export interface DerivedIndexStore {
     initializeEmptyIndex(): Promise<void>;
 
     getImage(id: string): Promise<ImageState | null>;
+
+    isBlobStored(oid: string): Promise<boolean>;
 
     getIdByOid(oid: string): Promise<string | null>;
 
@@ -221,6 +223,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
 
         await writeJsonFile(join(indexDir, 'image_state.json'), {});
         await writeJsonFile(join(indexDir, 'tag_index.json'), {});
+        await writeJsonFile(join(indexDir, 'blob_state.json'), {});
 
         await Deno.writeTextFile(join(indexDir, 'next_image_id'), '1', {
             create: true,
@@ -254,6 +257,15 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         return null;
     }
 
+    async isBlobStored(oid: string): Promise<boolean> {
+        using _lock = await this.mu.acquire();
+        const blobStatePath = join(this.conn.path, 'index', 'blob_state.json');
+
+        const blobState = await readJsonFile<BlobStateIndex>(blobStatePath);
+        if (blobState[oid]) return true;
+        return false;
+    }
+
     // → store applies event to imageState
     // → store writes imageState
     // → store writes nextCursor
@@ -261,12 +273,14 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         using _lock = await this.mu.acquire();
 
         const statePath = join(this.conn.path, 'index', 'image_state.json');
+        const blobStatePath = join(this.conn.path, 'index', 'blob_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
         const cursorPath = join(this.conn.path, 'event_cursor');
 
+        const blobState = await readJsonFile<BlobStateIndex>(blobStatePath);
         const imageState = await readJsonFile<ImageStateIndex>(statePath);
         const tagIndex = await readJsonFile<TagIndex>(indexPath);
-        applyEventToIndexState(imageState, tagIndex, event);
+        applyEventToIndexState(imageState, blobState, tagIndex, event);
 
         if (event.op === 'add') {
             using _idLock = await this.nextIdMutex.acquire();
@@ -324,7 +338,9 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const statePath = join(this.conn.path, 'index', 'image_state.json');
         const indexPath = join(this.conn.path, 'index', 'tag_index.json');
         const cursorPath = join(this.conn.path, 'event_cursor');
+        const blobStatePath = join(this.conn.path, 'index', 'blob_state.json');
 
+        const blobState = await readJsonFile<BlobStateIndex>(blobStatePath);
         const imageState = await readJsonFile<ImageStateIndex>(statePath);
         const tagIndex = await readJsonFile<TagIndex>(indexPath);
 
@@ -342,7 +358,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             const event = JSON.parse(line) as Event;
             const lineBytes = encoder.encode(line).byteLength + 1;
 
-            applyEventToIndexState(imageState, tagIndex, event);
+            applyEventToIndexState(imageState, blobState, tagIndex, event);
             byteOffset += lineBytes;
             appliedAny = true;
 
@@ -545,7 +561,12 @@ function removeFromTag(tagIndex: TagIndex, tag: string, id: string): void {
 }
 
 // private helper
-function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex, event: Event): void {
+function applyEventToIndexState(
+    imageState: ImageStateIndex,
+    blobState: BlobStateIndex,
+    tagIndex: TagIndex,
+    event: Event,
+): void {
     const id = String(event.id);
 
     switch (event.op) {
@@ -591,6 +612,10 @@ function applyEventToIndexState(imageState: ImageStateIndex, tagIndex: TagIndex,
                 for (const tag of img.tags) removeFromTag(tagIndex, tag, id);
             }
             delete imageState[id];
+            break;
+        }
+        case 'blob_stored': {
+            blobState[event.oid] = true;
             break;
         }
     }

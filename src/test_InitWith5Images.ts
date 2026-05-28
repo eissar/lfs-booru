@@ -1,11 +1,9 @@
-import { basename, join } from '@std/path';
-import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
+import { basename, dirname, join } from '@std/path';
 import { panic } from '@/util.ts';
 import { LibraryConnection } from '@/library.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { GitConstructError } from 'simple-git';
 import { type AddEvent } from '@/indexer.ts';
-import { writePointerFile } from './pointer.ts';
 import { type EventAppendResult, NdjsonEventLog } from '@/event_log.ts';
 
 for (const type of ['unhandledrejection', 'error']) {
@@ -16,15 +14,6 @@ for (const type of ['unhandledrejection', 'error']) {
 }
 
 if (!import.meta.dirname) panic('ran wrong');
-
-const LFS_SERVER = 'http://localhost:8080';
-
-const conn: LfsConn = {
-    url: LFS_SERVER,
-    auth: `Basic ${btoa('user:pass')}`,
-    user: 'USER',
-    repo: 'REPO',
-};
 
 const lib: LibraryConnection = {
     path: '/home/eissar/code/lfs-booru/libraries/new/',
@@ -123,28 +112,15 @@ async function examplePngs(): Promise<string[]> {
 
 async function internalIngest(
     bytes: Uint8Array,
-    conn: LfsConn,
     lib: LibraryConnection,
     eventLog: NdjsonEventLog,
     event: AddEvent,
 ): Promise<string | null> {
-    const size = bytes.byteLength;
+    const imagePath = join(lib.path, event.path);
+    await Deno.mkdir(dirname(imagePath), { recursive: true });
+    await Deno.writeFile(imagePath, bytes);
 
-    await PutObjectMeta(conn, event.oid, size).then((res) => {
-        if (!res.ok) {
-            throw new Error('put object meta failed', { cause: res });
-        }
-    });
-    await PutObjectContent(conn, event.oid, new Blob([bytes.buffer as ArrayBuffer])).then((res) => {
-        if (!res.ok) {
-            throw new Error('LFS Push failed', { cause: res });
-        }
-    });
-
-    const pointerPath = join(lib.path, event.path);
-    await writePointerFile(event.oid, size, pointerPath);
-
-    const appendResult: EventAppendResult = await eventLog.appendWithRollback(
+    await eventLog.appendWithRollback(
         event,
         async (appendResult) => {
             await stageAndCommit(
@@ -162,7 +138,7 @@ if (import.meta.main) {
     const scriptStart = performance.now();
     const timings: ImageTiming[] = [];
 
-    // We create from scratch every time. Run the LFS server on localhost:8080 first.
+    // We create from scratch every time.
     const [, removeMs] = await timed(async () => {
         await Deno.remove(lib.path, { recursive: true })
             .catch((e) => {
@@ -200,9 +176,10 @@ if (import.meta.main) {
             name: basename(imagePath),
             mtime: (stat.mtime ?? new Date()).toISOString(),
             addedAt: new Date().toISOString(),
+            contentType: 'image/png',
         };
 
-        const [ingestError, ingestMs] = await timed(() => internalIngest(bytes, conn, lib, eventLog, event));
+        const [ingestError, ingestMs] = await timed(() => internalIngest(bytes, lib, eventLog, event));
 
         if (ingestError) {
             console.error(ingestError);

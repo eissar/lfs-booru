@@ -2,7 +2,6 @@ import type { EventLog } from './event_log.ts';
 import { stageAndCommit } from './git.ts';
 import type { DerivedIndexStore } from './index_store.ts';
 import { ingest } from './ingest.ts';
-import type { LfsConnection } from './lfs/api.ts';
 import type { LibraryConnection } from './library.ts';
 import { typeByExtension } from '@std/media-types';
 import { Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from 'zip-js';
@@ -118,7 +117,6 @@ export async function* openEaglePack(
  */
 export async function ingestFromEagleSource(
     lib: LibraryConnection,
-    conn: LfsConnection,
     store: DerivedIndexStore,
     eventLog: EventLog,
     path: string,
@@ -153,7 +151,7 @@ export async function ingestFromEagleSource(
                 const width = typeof meta.width === 'number' ? meta.width : undefined;
                 const height = typeof meta.height === 'number' ? meta.height : undefined;
                 const mtime = typeof meta.modificationTime === 'string' ? meta.modificationTime : undefined;
-                const event = await ingest(lib, conn, store, file, tags, name, height, width, mtime)
+                const event = await ingest(lib, store, file, tags, name, height, width, mtime)
                     .catch((e) => {
                         console.warn(`could not import: ${name} ${e.message}`);
                         return null;

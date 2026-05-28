@@ -1,7 +1,5 @@
 import { DerivedIndexStore } from '@/index_store.ts';
-import { LfsConnection as LfsConn, PutObjectContent, PutObjectMeta } from '@/lfs/api.ts';
 import { AddEvent } from './indexer.ts';
-import { writePointerFile } from './pointer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
 import { startsWith } from '@std/bytes';
 import { dirname, join } from '@std/path';
@@ -114,12 +112,11 @@ function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
 /**
  * Ingest a media file into the library.
  *
- * Computes the SHA-256 OID, pushes the object to the LFS server, writes a
- * Git LFS pointer file, and returns the resulting add event. The caller is
- * responsible for appending the event to the event log and committing.
+ * Computes the SHA-256 OID, writes the media bytes into Git LFS-tracked
+ * library paths, and returns the resulting add event. The caller is responsible
+ * for appending the event to the event log and committing.
  *
  * @param lib Library connection descriptor.
- * @param conn LFS server connection.
  * @param store Derived index store (used to allocate the image ID).
  * @param file Media file to ingest.
  * @param tags Tags to associate with the media item.
@@ -131,7 +128,6 @@ function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
  */
 export async function ingest(
     lib: LibConn,
-    conn: LfsConn,
     store: DerivedIndexStore,
     file: File,
     tags: string[],
@@ -151,8 +147,6 @@ export async function ingest(
     // we can async check for duplicates by image signature
     // later.
 
-    const size = bytes.byteLength;
-
     // TODO: parse image with async job to set dimensions ?
     //
     // zero is falsy
@@ -167,7 +161,7 @@ export async function ingest(
     const fileExtension = detectMediaFileExtension(bytes);
     if (!fileExtension) throw new Error('Cannot detect supported media type');
 
-    const contentType = typeByExtension(fileExtension) ?? 'application/octet-stream';
+    const contentType = typeByExtension(`.${fileExtension}`) ?? 'application/octet-stream';
 
     const event: AddEvent = {
         op: 'add',
@@ -183,54 +177,29 @@ export async function ingest(
         contentType,
     };
 
-    // NOTE: make sure to set cause:res when making lfs-server requests
-    await PutObjectMeta(conn, event.oid, size).then((res) => {
-        if (!res.ok) {
-            throw new Error('put object meta failed', {
-                cause: res,
-            });
-        }
-    });
-    await PutObjectContent(conn, event.oid, new Blob([bytes])).then((res) => {
-        if (!res.ok) {
-            throw new Error('LFS Push failed', {
-                cause: res,
-            });
-        }
+    const mediaPath = join(lib.path, event.path);
+    await Deno.mkdir(dirname(mediaPath), { recursive: true });
+    await Deno.writeFile(mediaPath, bytes).catch(() => {
+        throw new Error(`Cannot write media file at "${mediaPath}"`);
     });
 
-    const pointerPath = join(lib.path, event.path);
+    // Generate thumbnail and write it into a Git LFS-tracked path.
+    const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } = await generateThumbnail(
+        bytes,
+        fileExtension,
+    );
 
-    await Deno.mkdir(dirname(pointerPath), { recursive: true });
+    const thumbnailBytes = new Uint8Array(await thumbnailBlob.arrayBuffer());
+    if (thumbnailBytes.byteLength !== thumbnailSize) {
+        throw new Error(
+            `Cannot write thumbnail for image ${id}: expected ${thumbnailSize} bytes but got ${thumbnailBytes.byteLength}`,
+        );
+    }
 
-    await writePointerFile(event.oid, size, pointerPath)
-        .catch(() => {
-            throw new Error(`failed to write pointer at ${pointerPath}`);
-        });
-
-    // Generate thumbnail and push to LFS.
-    const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } =
-        await generateThumbnail(bytes, fileExtension);
-
-    await PutObjectMeta(conn, thumbnailOid, thumbnailSize).then((res) => {
-        if (!res.ok) {
-            throw new Error('put thumbnail meta failed', {
-                cause: res,
-            });
-        }
-    });
-    await PutObjectContent(conn, thumbnailOid, thumbnailBlob).then((res) => {
-        if (!res.ok) {
-            throw new Error('LFS thumbnail push failed', {
-                cause: res,
-            });
-        }
-    });
-
-    const thumbPointerPath = join(lib.path, 'thumbnails', `${id}.jpg`);
-    await Deno.mkdir(dirname(thumbPointerPath), { recursive: true });
-    await writePointerFile(thumbnailOid, thumbnailSize, thumbPointerPath).catch(() => {
-        throw new Error(`failed to write thumbnail pointer at ${thumbPointerPath}`);
+    const thumbnailPath = join(lib.path, 'thumbnails', `${id}.jpg`);
+    await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
+    await Deno.writeFile(thumbnailPath, thumbnailBytes).catch(() => {
+        throw new Error(`Cannot write thumbnail file at "${thumbnailPath}"`);
     });
 
     event.thumbnailOid = thumbnailOid;
@@ -245,14 +214,12 @@ export async function ingest(
  * optionally `name`.
  *
  * @param lib Library connection descriptor.
- * @param conn LFS server connection.
  * @param req Incoming HTTP request with multipart form data.
  * @param store Derived index store (used to allocate the image ID).
  * @returns The constructed add event.
  */
 export async function ingestFile(
     lib: LibConn,
-    conn: LfsConn,
     req: Request,
     store: DerivedIndexStore,
 ): Promise<AddEvent> {
@@ -276,5 +243,5 @@ export async function ingestFile(
 
     const name = form.get('name') as string;
 
-    return ingest(lib, conn, store, file, tags, name);
+    return ingest(lib, store, file, tags, name);
 }
