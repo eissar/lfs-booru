@@ -43,10 +43,10 @@ export interface HtmlRenderer {
     /**
      * Render an inspector fragment for one image.
      *
-     * @param image Image state to inspect.
+     * @param image Image state with identifier to inspect.
      * @returns Rendered HTML fragment.
      */
-    renderInspector(image: ImageState): Promise<string>;
+    renderInspector(image: GalleryImage): Promise<string>;
 
     /**
      * Render a photo grid fragment from image records.
@@ -141,7 +141,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     }
 
     /** {@inheritDoc HtmlRenderer.renderInspector} */
-    async renderInspector(image: ImageState): Promise<string> {
+    async renderInspector(image: GalleryImage): Promise<string> {
         return await Promise.resolve(renderToString(
             <Inspector image={image} />,
         ));

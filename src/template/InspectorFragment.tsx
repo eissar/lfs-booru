@@ -1,12 +1,12 @@
-import type { ImageState } from '@/indexer.ts';
+import { GalleryImage } from '../renderer.tsx';
 
 /**
  * Renders an inspector details fragment for one image.
  *
- * @param image Image state to inspect.
+ * @param image Image state with identifier to inspect.
  * @returns Inspector details HTML fragment.
  */
-export default function Inspector({ image }: { image: ImageState }) {
+export default function Inspector({ image }: { image: GalleryImage }) {
     let thumbSrc = `/image/${image.oid}`;
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
