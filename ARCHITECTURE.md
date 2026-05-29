@@ -11,20 +11,6 @@ The booru prototype is a Git-backed media gallery with an event-sourced metadata
 
 The implementation keeps the source model simple: committed NDJSON events describe metadata state, while media and thumbnail bytes live behind LFS-tracked paths. Derived JSON and HTML artifacts are disposable and rebuildable from committed source files and events.
 
-## Architectural Goals Implied by the Code
-
-The code favors:
-
-- append-only metadata history over mutable metadata records
-- ordinary Git repositories as library containers
-- Git LFS for binary storage and lazy hydration
-- simple TypeScript interface boundaries for event logs, derived stores, and renderers
-- local filesystem artifacts that can be inspected and regenerated
-- request handlers that sequence persistence steps explicitly
-- startup checks that rebuild derived state when required artifacts are missing or reset
-
-The design accepts coarse file operations and synchronous request work in exchange for transparent storage layout and direct use of Git tooling.
-
 ## Source of Truth
 
 ### Metadata
@@ -41,27 +27,13 @@ Original media files are addressed by SHA-256 OID in add events and stored throu
 
 `index/next_image_id` is the write-path allocator. Add events persist allocated IDs. Replay reconciles the allocator upward from committed add-event IDs, so gaps are allowed and committed events remain the durable record of assigned IDs.
 
-## Git and Git LFS Responsibilities
-
-Git records small-file history and path-level changes:
-
-- committed `events/*.ndjson` shards
-- committed LFS pointer entries for `images/**` and `thumbnails/**`
-- library configuration inherited from `libraries/template`
-
-Git LFS handles binary storage for paths matched by `.gitattributes`. The application writes media and thumbnail bytes into the working tree, then `git add` lets Git LFS clean those paths into pointer entries and local LFS objects.
-
-`Init` clones the template with smudge disabled and adds local `lfs.skipSmudge = true`. The template LFS config includes thumbnails and excludes originals for fetches, matching the gallery's preference for available thumbnails and lazy original hydration.
-
-Image serving uses Git LFS operationally: it runs `git lfs pull --include ... --exclude ''` for requested paths when needed and reads bytes from either the thumbnail path or the local `.git/lfs/objects` location.
-
 ## Component Boundaries
 
 ### HTTP boundary
 
 `server.ts` owns startup, route matching, request validation, request logging, and high-level write sequencing. It constructs the event log, derived store, and renderer, then passes them into a closure-based handler.
 
-The HTTP boundary returns `Response` objects directly. There is no framework router, result wrapper, or centralized error hierarchy.
+The HTTP boundary returns `Response` objects directly. There is no framework router, result wrapper, or centralized error hierarchy. The `c` utility in `src/util.ts` provides response constructors (`json`, `text`, `blob`, `html`, `error`, `redirect`).
 
 ### Ingest boundary
 
@@ -83,7 +55,7 @@ Replay and post-ingest application use the same `applyEvent` reducer path. Batch
 
 ### Rendering boundary
 
-`HtmlRenderer` separates request handling from templates. `CachingHtmlRenderer` caches gallery shell pages by content hash and renders uncached cards, photo-grid fragments, and inspector fragments. Template modules produce HTML strings and use escaping for user-facing values.
+`HtmlRenderer` separates request handling from templates. `CachingHtmlRenderer` caches gallery shell pages by content hash and renders uncached cards, photo-grid fragments, and inspector fragments. Template modules produce HTML strings through Preact JSX.
 
 ### Thumbnail boundary
 
@@ -107,7 +79,7 @@ parse flags and .env
   -> serve HTTP
 ```
 
-Startup treats missing derived artifacts as rebuildable state. Missing or invalid library initialization dependencies fail through Git, filesystem, or panic paths.
+Startup treats missing derived artifacts as rebuildable state. Missing or invalid library initialization dependencies fail through Git or panic paths.
 
 ### Upload ingest
 
@@ -170,7 +142,7 @@ The endpoint trusts the derived index for original OID lookup and trusts Git LFS
 ```text
 /regen-thumbnail?oid=...
   -> map original OID to image state
-  -> read original media path
+  -> read original media file
   -> generate new JPEG thumbnail
   -> append regen_thumbnail event with rollback around Git commit
   -> apply event to update thumbnailOid in image state
@@ -212,16 +184,16 @@ The library `.gitignore` keeps derived files out of commits while allowing place
 - Thumbnail OIDs are SHA-256 hashes of generated JPEG bytes.
 - Image IDs are numeric in events and strings in JSON index keys.
 - ID allocation is monotonic and non-contiguous.
-- `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be initialized.
+- `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be considered initialized.
 - `listItems` uses full-file loading, in-memory sorting, and OR tag matching.
 - Renderer gallery-page cache identity includes renderer version and input filter.
 - Process-local mutexes serialize operations only inside one process and one store/event-log instance.
 
-## Trust, Error, and Failure Boundaries
+## Failure Boundaries
 
 ### Request input
 
-The ingest handler requires a file field named `image` and parses `tags` as a JSON array of strings. Query parameters for limits, offsets, and sort values are normalized or rejected locally. HTML templates escape names, tags, URLs, and other displayed values where user data is interpolated.
+The ingest handler requires a file field named `image` and parses `tags` as a JSON array of strings. Query parameters for limits, offsets, and sort values are normalized or rejected locally. HTML templates escape user-facing values through Preact's default escaping.
 
 ### Media detection and thumbnails
 
@@ -243,7 +215,7 @@ The file locks are process-local mutexes, not repository locks. Concurrent proce
 
 ### Import failure
 
-Eagle import skips individual items whose ingest step throws, writes events only for successful items, and commits a single batch when at least one event was produced. The temporary extraction and prepared-event directories are best-effort removed in `finally` blocks.
+Eagle import skips individual items whose ingest step throws, writes events only for successful items, and commits a single batch when at least one event was produced. The temporary extraction and prepared-event directories are best-effort cleaned up in `finally` blocks.
 
 ## Design Tradeoffs
 
