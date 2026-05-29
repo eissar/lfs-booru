@@ -1,7 +1,11 @@
 import { escape } from '@std/html/entities';
 import { join } from '@std/path';
-import { CachingHtmlRenderer, type GalleryImage } from '@/renderer.ts';
-import { template } from '@/template/index.ts';
+import { h } from 'preact';
+import { renderToString } from 'preact-render-to-string';
+import { CachingHtmlRenderer, type GalleryImage } from '@/renderer.tsx';
+import PhotoGrid from '@/template/PhotoGridFragment.tsx';
+import { GalleryPage } from '@/template/GalleryPage.tsx';
+import { ItemCard } from '@/template/ItemCard.tsx';
 
 const args = Deno.args[0] === '--' ? Deno.args.slice(1) : Deno.args;
 const outputDirectory = args[0] ?? '.lint-artifacts';
@@ -40,13 +44,21 @@ await Deno.mkdir(outputDirectory, { recursive: true });
 
 const renderer = new CachingHtmlRenderer(outputDirectory, { version: 'lint-artifact' });
 const cards = (await Promise.all(sampleImages.map((image) => renderer.renderImageCard(image)))).join('\n');
-const populatedPhotoGrid = template.fragment.photoGrid(sampleImages, String(sampleImages.length), true);
-const emptyPhotoGrid = template.fragment.photoGrid([], '0', false);
-const galleryPage = template.page.Gallery('Lint gallery', 'lint-artifact', {
-    limit: 25,
-    offset: 0,
-    tags: ['landscape', 'blue sky'],
-});
+const populatedPhotoGrid = renderToString(
+    h(PhotoGrid, {
+        cards: sampleImages.map((image) => h(ItemCard, { image })),
+        offset: String(sampleImages.length),
+        hasMore: true,
+    }),
+);
+const emptyPhotoGrid = renderToString(h(PhotoGrid, { cards: [], offset: '0', hasMore: false }));
+const galleryPage = `<!DOCTYPE html>\n${renderToString(
+    h(GalleryPage, {
+        title: 'Lint gallery',
+        version: 'lint-artifact',
+        search: { limit: 25, offset: 0, tags: ['landscape', 'blue sky'] },
+    }),
+)}`;
 const populatedGalleryPage = replaceInitialPhotoGrid(galleryPage, populatedPhotoGrid);
 
 const artifacts = new Map<string, string>([

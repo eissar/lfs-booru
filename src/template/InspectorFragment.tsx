@@ -1,4 +1,3 @@
-import { renderToString } from 'preact-render-to-string';
 import type { ImageState } from '@/indexer.ts';
 
 /**
@@ -7,7 +6,7 @@ import type { ImageState } from '@/indexer.ts';
  * @param image Image state to inspect.
  * @returns Inspector details HTML fragment.
  */
-export default function inspector(image: ImageState): string {
+export default function Inspector({ image }: { image: ImageState }) {
     let thumbSrc = `/image/${image.oid}`;
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
@@ -23,9 +22,11 @@ export default function inspector(image: ImageState): string {
         );
     });
 
-    if (tags.length === 0) tags.push(<span class='text-xs text-muted'>No tags</span>);
+    if (tags.length === 0) {
+        tags.push(<span class='text-xs text-muted'>No tags</span>);
+    }
 
-    return renderToString(
+    return (
         <section class='space-y-4'>
             <input type='hidden' name='oid' value={image.oid} />
             <img
@@ -63,6 +64,6 @@ export default function inspector(image: ImageState): string {
                     {tags}
                 </div>
             </div>
-        </section>,
+        </section>
     );
 }

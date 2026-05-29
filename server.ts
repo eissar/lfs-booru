@@ -13,11 +13,11 @@ import { ingest } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
-import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
+import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.tsx';
 import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
 import { generateThumbnail } from '@/thumbnail.ts';
-import { ItemCard } from '@/template/item-card.tsx';
+import { ItemCard } from '@/template/ItemCard.tsx';
 
 const MIN_LIMIT = 10;
 

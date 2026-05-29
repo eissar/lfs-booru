@@ -1,5 +1,4 @@
-import { renderToString } from 'preact-render-to-string';
-import type { ComponentChildren } from 'preact';
+import type { ComponentChildren, JSX } from 'preact';
 
 function LoadMoreButton({ offset, hasMore }: { offset: string; hasMore: boolean }) {
     if (hasMore) {
@@ -31,18 +30,21 @@ function LoadMoreButton({ offset, hasMore }: { offset: string; hasMore: boolean 
 }
 
 /**
- * Renders the photo grid fragment.
+ * Renders the photo grid component.
  *
  * @param cards Image records to render as grid cards.
  * @param nextOffset Next offset string for pagination display.
  * @param hasMore Whether more items are available.
- * @returns HTML string
  */
-export default function photoGrid(cards: ComponentChildren, nextOffset: string, hasMore: boolean): string {
-    return renderToString(
-        <div id='photo-grid' class='masonry-grid'>
+export default function PhotoGrid({ cards, offset, hasMore }: {
+    cards: ComponentChildren;
+    offset: string;
+    hasMore: boolean;
+}): JSX.Element {
+    return (
+        <div id='photo-grid' className='masonry-grid'>
             {cards}
-            <LoadMoreButton offset={nextOffset} hasMore={hasMore} />
-        </div>,
+            <LoadMoreButton offset={offset} hasMore={hasMore} />
+        </div>
     );
 }

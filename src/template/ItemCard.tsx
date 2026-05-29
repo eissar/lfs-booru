@@ -1,6 +1,15 @@
 import type { JSX } from 'preact';
-import { renderToString } from 'preact-render-to-string';
-import type { GalleryImage } from '@/renderer.ts';
+import type { GalleryImage } from '@/renderer.tsx';
+
+function tagHref(tag: string): string {
+    const search = new URLSearchParams();
+    search.append('tags', tag);
+
+    const query = search.toString();
+    if (query) return `/gallery?${query}`;
+
+    return '/gallery';
+}
 
 /**
  * Renders an item card JSX component.
@@ -49,24 +58,4 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
             </div>
         </article>
     );
-}
-
-/**
- * Renders an item card fragment.
- *
- * @param image Image record to render.
- * @returns The item card HTML fragment string.
- */
-export default function itemCard(image: GalleryImage): string {
-    return renderToString(<ItemCard image={image} />);
-}
-
-function tagHref(tag: string): string {
-    const search = new URLSearchParams();
-    search.append('tags', tag);
-
-    const query = search.toString();
-    if (query) return `/gallery?${query}`;
-
-    return '/gallery';
 }

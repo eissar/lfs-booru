@@ -1,4 +1,3 @@
-import { renderToString } from 'preact-render-to-string';
 import type { ItemsFilter } from '@/index_store.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 
@@ -139,7 +138,7 @@ function SortOptions({ sort }: { sort: ItemsFilter['sort'] }) {
     );
 }
 
-function GalleryPage({
+export function GalleryPage({
     title,
     version,
     search,
@@ -442,16 +441,4 @@ document.addEventListener('DOMContentLoaded', function () {
             </body>
         </html>
     );
-}
-
-/**
- * Renders the main gallery HTML page.
- *
- * @param title - The page title.
- * @param version - The renderer/template version.
- * @param search - The current filter state.
- * @returns HTML string
- */
-export default function gallery(title: string, version: string, search: ItemsFilter): string {
-    return `<!DOCTYPE html>\n${renderToString(<GalleryPage title={title} version={version} search={search} />)}`;
 }

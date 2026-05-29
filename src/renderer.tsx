@@ -1,8 +1,12 @@
+import { renderToString } from 'preact-render-to-string';
 import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
-import { template } from '@/template/index.ts';
 import { ItemsFilter } from '@/index_store.ts';
 import { ComponentChildren } from 'preact';
+import { ItemCard } from '@/template/ItemCard.tsx';
+import PhotoGrid from '@/template/PhotoGridFragment.tsx';
+import { GalleryPage } from '@/template/GalleryPage.tsx';
+import Inspector from './template/InspectorFragment.tsx';
 
 /**
  * Image state with the derived index identifier attached.
@@ -86,7 +90,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      */
     async renderImageCard(image: GalleryImage): Promise<string> {
         // wrap in promise to satisfy signature
-        return await Promise.resolve(template.fragment.itemCard(image));
+        return await Promise.resolve(renderToString(<ItemCard image={image} />));
     }
 
     /**
@@ -117,7 +121,10 @@ export class CachingHtmlRenderer implements HtmlRenderer {
             throw error;
         });
         if (cached !== null) return cached;
-        const html = template.page.Gallery(input.title, this.version, input.filter);
+
+        const html = `<!DOCTYPE html>\n${
+            renderToString(<GalleryPage title={input.title} version={this.version} search={input.filter} />)
+        }`;
 
         await Deno.mkdir(cacheDir, { recursive: true });
 
@@ -135,7 +142,9 @@ export class CachingHtmlRenderer implements HtmlRenderer {
 
     /** {@inheritDoc HtmlRenderer.renderInspector} */
     async renderInspector(image: ImageState): Promise<string> {
-        return await Promise.resolve(template.fragment.inspector(image));
+        return await Promise.resolve(renderToString(
+            <Inspector image={image} />,
+        ));
     }
 
     // TODO: rename to renderCardGrid ?
@@ -144,7 +153,9 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @param input Photo grid images and pagination state.
      */
     async renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string> {
-        return await Promise.resolve(template.fragment.photoGrid(input.cards, input.offset, input.hasMore));
+        return await Promise.resolve(
+            renderToString(<PhotoGrid cards={input.cards} offset={input.offset} hasMore={input.hasMore} />),
+        );
     }
 }
 
