@@ -1,5 +1,4 @@
-import { escape } from '@std/html/entities';
-import { html } from '@/html.ts';
+import { renderToString } from 'preact-render-to-string';
 import type { GalleryImage } from '@/renderer.ts';
 
 /**
@@ -10,38 +9,32 @@ import type { GalleryImage } from '@/renderer.ts';
  * @returns The item card HTML fragment string.
  */
 export default function itemCard(image: GalleryImage, tags: string): string {
-    let imageSrc = `/image/${image.oid}`; // oid doesn't need escape
-    let thumbSrc = `/image/${image.oid}`; // use the image itself as a fallback?
-    if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
-
+    const imageSrc = `/image/${image.oid}`;
+    const thumbSrc = image.thumbnailOid ? `/image/${image.thumbnailOid}` : `/image/${image.oid}`;
     const imageInspect = `/fragment/inspect/${image.oid}`;
-    const imageName = escape(image.name);
-
-    return html`
-        <!-- TODO: add data-tags -->
-        <article class="masonry-item group" data-image-id="${escape(image.id)}">
+    return renderToString(
+        <article class="masonry-item group" data-image-id={image.id}>
             <div class="gallery-card relative overflow-hidden flex flex-col rounded-lg hover-card">
                 <div class="gallery-card-meta block p-4 w-full peer order-2">
-                    <a href="${imageSrc}">
-                        <span class="font-medium truncate">${imageName}</span>
+                    <a href={imageSrc}>
+                        <span class="font-medium truncate">{image.name}</span>
                     </a>
                     <div class="flex flex-wrap gap-2 text-xs mt-2">
-                        ${tags}
+                        {/* deno-lint-ignore react-no-danger */}
+                        <span dangerouslySetInnerHTML={{ __html: tags }} />
                     </div>
                 </div>
-
-                <!-- TODO: add alt -->
                 <img
-                    src="${thumbSrc}"
+                    src={thumbSrc}
                     loading="lazy"
-                    width="${image.width}"
-                    height="${image.height}"
-                    hx-get="${imageInspect}"
+                    width={image.width}
+                    height={image.height}
+                    hx-get={imageInspect}
                     hx-target="#inspector-content"
                     hx-swap="innerHTML"
                     class="gallery-card-image transition-transform duration-300 peer-hover:scale-105 order-1"
                 />
             </div>
-        </article>
-    `;
+        </article>,
+    );
 }
