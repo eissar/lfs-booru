@@ -40,8 +40,8 @@ await Deno.mkdir(outputDirectory, { recursive: true });
 
 const renderer = new CachingHtmlRenderer(outputDirectory, { version: 'lint-artifact' });
 const cards = (await Promise.all(sampleImages.map((image) => renderer.renderImageCard(image)))).join('\n');
-const populatedPhotoGrid = template.fragment.photoGrid(cards, String(sampleImages.length), true);
-const emptyPhotoGrid = template.fragment.photoGrid('', '0', false);
+const populatedPhotoGrid = template.fragment.photoGrid(sampleImages, String(sampleImages.length), true);
+const emptyPhotoGrid = template.fragment.photoGrid([], '0', false);
 const galleryPage = template.page.Gallery('Lint gallery', 'lint-artifact', {
     limit: 25,
     offset: 0,

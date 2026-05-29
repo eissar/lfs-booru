@@ -1,14 +1,14 @@
-import gallery from '@/template/gallery.tsx';
-import itemCard from '@/template/item-card.tsx';
-import photoGrid from '@/template/photo-grid_fragment.tsx';
-import inspector from '@/template/inspector_fragment.tsx';
+import gallery from '@/template/GalleryPage.tsx';
+import itemCard from '@/template/ItemCard.tsx';
+import photoGrid from '@/template/PhotoGridFragment.tsx';
+import inspector from '@/template/InspectorFragment.tsx';
 
 export const template = {
     page: {
         Gallery: gallery,
     },
     fragment: {
-        ImageCard: itemCard,
+        itemCard: itemCard,
         photoGrid: photoGrid,
         inspector: inspector,
     },

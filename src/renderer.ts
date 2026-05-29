@@ -1,9 +1,8 @@
 import { join } from '@std/path';
 import type { ImageState } from '@/indexer.ts';
-// import { escape } from '@std/html/entities';
-import { html } from '@/html.ts';
 import { template } from '@/template/index.ts';
 import { ItemsFilter } from '@/index_store.ts';
+import { ComponentChildren } from 'preact';
 
 /**
  * Image state with the derived index identifier attached.
@@ -26,9 +25,9 @@ export interface HtmlRenderer {
     renderImageCard(image: GalleryImage): Promise<string>;
 
     /**
-     * Render a gallery page from pre-rendered card fragments.
+     * Render a gallery page shell.
      *
-     * @param input Gallery page title and card fragments.
+     * @param input Gallery page title and filter state.
      * @returns Rendered gallery page HTML.
      */
     renderGalleryPage(input: {
@@ -45,7 +44,13 @@ export interface HtmlRenderer {
      */
     renderInspector(image: ImageState): Promise<string>;
 
-    renderPhotoGrid(input: { cards: string; offset: string; hasMore: boolean }): Promise<string>;
+    /**
+     * Render a photo grid fragment from image records.
+     *
+     * @param input Photo grid images and pagination state.
+     * @returns Rendered photo grid HTML fragment.
+     */
+    renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string>;
 }
 
 /**
@@ -80,39 +85,18 @@ export class CachingHtmlRenderer implements HtmlRenderer {
      * @returns Rendered HTML fragment.
      */
     async renderImageCard(image: GalleryImage): Promise<string> {
-        // TODO: move somewhere or inline
-        const renderTagTemplate = (tag: string) => {
-            let tagUrl: string = '/gallery';
-
-            const search = new URLSearchParams();
-            // should escape tags? or just
-            // sanitize in ingest?
-            search.append('tags', tag);
-
-            const query = search.toString();
-            if (query) tagUrl = `/gallery?${query}`;
-
-            return html`
-                <span class="text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">
-                    <a class="image-card-tags" href="${tagUrl}">${tag}</a>
-                </span>
-            `;
-        };
-
-        const tags: string = image.tags.map(renderTagTemplate).join('\n');
-
         // wrap in promise to satisfy signature
-        return await Promise.resolve(template.fragment.ImageCard(image, tags));
+        return await Promise.resolve(template.fragment.itemCard(image));
     }
 
     /**
      * Render and cache a gallery page under `index/artifacts/gallery-pages`.
      *
-     * Cache identity includes the renderer version, page title, and exact card
-     * fragments. If a matching artifact exists, the cached HTML is returned
-     * without rendering or rewriting it.
+     * Cache identity includes the renderer version, page title, and filter state.
+     * If a matching artifact exists, the cached HTML is returned without
+     * rendering or rewriting it.
      *
-     * @param input Gallery page title and pre-rendered image card fragments.
+     * @param input Gallery page title and filter state.
      * @returns Rendered gallery page HTML.
      */
     async renderGalleryPage(input: {
@@ -157,9 +141,9 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     // TODO: rename to renderCardGrid ?
     //
     /** {@inheritDoc HtmlRenderer.renderPhotoGrid}
-     * @param input.offset - how many cards have been served
+     * @param input Photo grid images and pagination state.
      */
-    async renderPhotoGrid(input: { cards: string; offset: string; hasMore: boolean }): Promise<string> {
+    async renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string> {
         return await Promise.resolve(template.fragment.photoGrid(input.cards, input.offset, input.hasMore));
     }
 }

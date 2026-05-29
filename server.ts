@@ -17,6 +17,7 @@ import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.ts';
 import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
 import { generateThumbnail } from '@/thumbnail.ts';
+import { ItemCard } from '@/template/item-card.tsx';
 
 const MIN_LIMIT = 10;
 
@@ -198,30 +199,27 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         };
         if (offset) opts.offset = offset;
 
-        const imageList = store.listItems(opts);
+        const itemsList = store.listItems(opts);
 
-        const images = [];
-        for await (const [id, img] of imageList) {
-            if (img.oid) images.push({ id, ...img });
+        const cards = [];
+        for await (const [id, img] of itemsList) {
+            const image = { ...img, id: id };
+            if (img.oid) cards.push(ItemCard({ image: image }));
         }
-        const cards = await Promise.all(images.map((img) => render.renderImageCard(img)));
-        const rendered = cards.length;
 
         let hasMore = true;
 
         // more accurately, store.listItems returns len items gt filter.limit
         // but this is the easier, stateless way to do this without refactoring
         // that function
-        if (limit > rendered) hasMore = false;
-        debug([limit, rendered, limit > rendered]);
-        debug(hasMore);
+        if (limit > cards.length) hasMore = false;
 
-        if (offset) offset = offset + images.length;
-        else offset = images.length;
+        if (offset) offset = offset + cards.length;
+        else offset = cards.length;
 
         return c.html(
             await render.renderPhotoGrid({
-                cards: cards.join(''),
+                cards: cards,
                 offset: String(offset),
                 hasMore,
             }),
@@ -397,7 +395,7 @@ function createHandler(
                 thumbnailOid,
             };
 
-            const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+            const appendResult = await eventLog.appendWithRollback(event, async (_appendResult) => {
                 const paths = [`thumbnails/${thumbnailOid}.jpg`];
                 await stageAndCommit(paths, `booru: regenerate thumbnail ${id}`, lib);
             }).catch((err: unknown) => {
