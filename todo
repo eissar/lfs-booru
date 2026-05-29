@@ -40,33 +40,28 @@ when failing to clone new library
      - Add an events/ filesystem watcher.
      - Trigger indexing when new event files or segments appear.
 
- 7. Introduce pluggable index backend
-     - Define an index backend interface.
-     - Keep current JSON backend as default.
-     - Leave room for SQLite/bbolt/roaring bitmap implementations later.
-
- 8. Add query operations
+ 7. Add query operations
      - Implement tag intersection.
      - Implement tag exclusion.
      - Implement counts / facets.
      - Refactor tag_index.json access behind query helpers.
- 9. Implement incremental static renderer
+ 8. Implement incremental static renderer
      - Generate static HTML pages for:
            - homepage
            - tag pages
            - paginated image sets
            - image detail pages
      - Re-render only pages affected by new/changed events.
- 10. Keep dynamic routes as fallback
+ 9. Keep dynamic routes as fallback
  - Preserve existing GET / and GET /image/:oid.
  - Prefer static files where available.
 
- 11. Add Git scaling optimizations
+ 10. Add Git scaling optimizations
  - Support partial clone with --filter=blob:none.
  - Add sparse checkout instructions/scripts.
  - Add scheduled git gc.
 
- 12. Add background Git batch writer
+ 11. Add background Git batch writer
  - Batch file additions and commits when async mode is introduced.
  - Ensure the synchronous archival path remains available for durability.
 
