@@ -110,11 +110,25 @@ function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
 }
 
 /**
- * Ingest a media file into the library.
+ * Result of a pure ingest computation. No files are written to disk.
+ * The caller is responsible for writing mediaBytes and thumbnailBytes
+ * into the library worktree before staging and committing.
+ */
+export type IngestResult = {
+    /** The constructed add event (includes thumbnailOid when a thumbnail was generated). */
+    event: AddEvent;
+    /** Raw media bytes to write to `images/{id}.{ext}`. */
+    mediaBytes: Uint8Array;
+    /** Raw thumbnail JPEG bytes to write to `thumbnails/{thumbOid}.jpg`. */
+    thumbnailBytes: Uint8Array;
+};
+
+/**
+ * Compute ingest metadata for a media file without writing to disk.
  *
- * Computes the SHA-256 OID, writes the media bytes into Git LFS-tracked
- * library paths, and returns the resulting add event. The caller is responsible
- * for appending the event to the event log and committing.
+ * Computes the SHA-256 OID, detects the media extension, allocates an image
+ * ID, and generates a thumbnail. Returns all data the caller needs to write
+ * files, append an event, and commit in one atomic scope.
  *
  * @param lib Library connection descriptor.
  * @param store Derived index store (used to allocate the image ID).
@@ -124,7 +138,7 @@ function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
  * @param height Optional media height in pixels.
  * @param width Optional media width in pixels.
  * @param mtime Optional modification time as an ISO-8601 string.
- * @returns The constructed add event.
+ * @returns The add event, media bytes, and thumbnail bytes.
  */
 export async function ingest(
     lib: LibConn,
@@ -135,7 +149,7 @@ export async function ingest(
     height?: number,
     width?: number,
     mtime?: string,
-): Promise<AddEvent> {
+): Promise<IngestResult> {
     const bytes = new Uint8Array(await file.arrayBuffer());
 
     const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
@@ -177,13 +191,7 @@ export async function ingest(
         contentType,
     };
 
-    const mediaPath = join(lib.path, event.path);
-    await Deno.mkdir(dirname(mediaPath), { recursive: true });
-    await Deno.writeFile(mediaPath, bytes).catch(() => {
-        throw new Error(`Cannot write media file at "${mediaPath}"`);
-    });
-
-    // Generate thumbnail and write it into a Git LFS-tracked path.
+    // Generate thumbnail without writing to disk.
     const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } = await generateThumbnail(
         bytes,
         fileExtension,
@@ -192,19 +200,13 @@ export async function ingest(
     const thumbnailBytes = new Uint8Array(await thumbnailBlob.arrayBuffer());
     if (thumbnailBytes.byteLength !== thumbnailSize) {
         throw new Error(
-            `Cannot write thumbnail for image ${id}: expected ${thumbnailSize} bytes but got ${thumbnailBytes.byteLength}`,
+            `Cannot generate thumbnail for image ${id}: expected ${thumbnailSize} bytes but got ${thumbnailBytes.byteLength}`,
         );
     }
 
-    const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.jpg`);
-    await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
-    await Deno.writeFile(thumbnailPath, thumbnailBytes).catch(() => {
-        throw new Error(`Cannot write thumbnail file at "${thumbnailPath}"`);
-    });
-
     event.thumbnailOid = thumbnailOid;
 
-    return event;
+    return { event, mediaBytes: bytes, thumbnailBytes };
 }
 
 /**
@@ -216,13 +218,13 @@ export async function ingest(
  * @param lib Library connection descriptor.
  * @param req Incoming HTTP request with multipart form data.
  * @param store Derived index store (used to allocate the image ID).
- * @returns The constructed add event.
+ * @returns The add event, media bytes, and thumbnail bytes.
  */
 export async function ingestFile(
     lib: LibConn,
     req: Request,
     store: DerivedIndexStore,
-): Promise<AddEvent> {
+): Promise<IngestResult> {
     const form = await req.formData();
 
     const file = form.get('image') as File | null;

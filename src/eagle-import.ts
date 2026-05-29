@@ -3,6 +3,7 @@ import { stageAndCommit } from './git.ts';
 import type { DerivedIndexStore } from './index_store.ts';
 import { ingest } from './ingest.ts';
 import type { LibraryConnection } from './library.ts';
+import { dirname, join } from '@std/path';
 import { typeByExtension } from '@std/media-types';
 import { Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from 'zip-js';
 import { panic } from './util.ts';
@@ -131,6 +132,7 @@ export async function ingestFromEagleSource(
     const assetPaths: string[] = [];
     const encoder = new TextEncoder();
     let eventCount = 0;
+    const pendingWrites: { mediaPath: string; mediaBytes: Uint8Array; thumbnailPath: string; thumbnailBytes: Uint8Array }[] = [];
 
     try {
         {
@@ -151,12 +153,14 @@ export async function ingestFromEagleSource(
                 const width = typeof meta.width === 'number' ? meta.width : undefined;
                 const height = typeof meta.height === 'number' ? meta.height : undefined;
                 const mtime = typeof meta.modificationTime === 'string' ? meta.modificationTime : undefined;
-                const event = await ingest(lib, store, file, tags, name, height, width, mtime)
+                const result = await ingest(lib, store, file, tags, name, height, width, mtime)
                     .catch((e) => {
                         console.warn(`could not import: ${name} ${e.message}`);
                         return null;
                     });
-                if (event === null) continue;
+                if (result === null) continue;
+
+                const { event, mediaBytes, thumbnailBytes } = result;
 
                 const eventBytes = encoder.encode(`${JSON.stringify(event)}\n`);
 
@@ -171,6 +175,10 @@ export async function ingestFromEagleSource(
                     bytesWritten += written;
                 }
 
+                const mediaPath = join(lib.path, event.path);
+                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.jpg`);
+                pendingWrites.push({ mediaPath, mediaBytes, thumbnailPath, thumbnailBytes });
+
                 assetPaths.push(event.path);
                 if (event.thumbnailOid) assetPaths.push(`thumbnails/${event.thumbnailOid}.jpg`);
                 eventCount++;
@@ -180,6 +188,14 @@ export async function ingestFromEagleSource(
         if (eventCount === 0) return 0;
 
         const appendResult = await eventLog.appendPreparedFileWithRollback(preparedEventsPath, async (appendResult) => {
+            // Write all media and thumbnail files inside the rollback boundary.
+            for (const { mediaPath, mediaBytes, thumbnailPath, thumbnailBytes } of pendingWrites) {
+                await Deno.mkdir(dirname(mediaPath), { recursive: true });
+                await Deno.writeFile(mediaPath, mediaBytes);
+                await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
+                await Deno.writeFile(thumbnailPath, thumbnailBytes);
+            }
+
             const paths = Array.from(new Set([appendResult.path, ...assetPaths]));
             await stageAndCommit(paths, `booru: import ${eventCount} eagle items`, lib);
         });

@@ -323,19 +323,28 @@ function createHandler(
 
             const name = form.get('name') as string;
 
-            const event: AddEvent | Response = await ingest(lib, store, file, tags, name)
+            const result = await ingest(lib, store, file, tags, name)
                 .catch((e) => {
                     if (e.cause instanceof Response) {
-                        // upstream error
-                        // we can match url, path here if we want later.
                         return c.error(e.message, 502);
                     }
                     return c.error(e.message, 400);
                 });
-            if (event instanceof Response) return event; // error
+            if (result instanceof Response) return result;
+
+            const { event, mediaBytes, thumbnailBytes } = result;
 
             const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
-                // pass relative file paths
+                // Write media and thumbnail files inside the rollback boundary.
+                // If the Git commit fails, NDJSON is truncated and no files are left on disk.
+                const mediaPath = join(lib.path, event.path);
+                await Deno.mkdir(dirname(mediaPath), { recursive: true });
+                await Deno.writeFile(mediaPath, mediaBytes);
+
+                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.jpg`);
+                await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
+                await Deno.writeFile(thumbnailPath, thumbnailBytes);
+
                 const paths = [appendResult.path, event.path];
                 if (event.thumbnailOid) paths.push(`thumbnails/${event.thumbnailOid}.jpg`);
 
@@ -345,22 +354,20 @@ function createHandler(
                             // we passed invalid or malformed commands, inputs to stageAndCommit
                             throw err;
                         }
-                        if (err instanceof GitError) { // also GitResponseError
+                        if (err instanceof GitError) {
                             // other errors during git commit
                             throw err;
                         }
                         throw err;
                     });
             }).catch((err: unknown) => {
-                if (err instanceof Response) return err; // when does this happen?
+                if (err instanceof Response) return err;
                 return c.error(`ingest failed: ${err instanceof Error ? err.message : String(err)}`, 500);
             });
 
-            // we can make this more specific
             if (appendResult instanceof Error) return c.error(`error during event writing.`, 500);
-            if (appendResult instanceof Response) return appendResult; // when does this happen?
+            if (appendResult instanceof Response) return appendResult;
 
-            // apply after everything happened without err
             const applyResult = await store.applyEvent(event, appendResult.cursor)
                 .catch(() => {
                     return c.error('ERROR: could not apply event');
