@@ -1,4 +1,5 @@
 import type { ItemsFilter } from '@/index_store.ts';
+import { MASONRY_LAYOUT_SCRIPT } from '@/template/masonryScript.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 
 function HiddenInput({ name, value }: { name: string; value: string }) {
@@ -167,7 +168,9 @@ export function GalleryPage({
                 <script
                     // deno-lint-ignore react-no-danger
                     dangerouslySetInnerHTML={{
-                        __html: `(function () {
+                        __html: `${MASONRY_LAYOUT_SCRIPT}
+
+(function () {
     const savedTheme = localStorage.getItem('theme');
     const isDarkMode = savedTheme ? savedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
@@ -208,8 +211,15 @@ document.addEventListener('DOMContentLoaded', function () {
             const nextUrl = new URL(window.location.href);
             nextUrl.searchParams.set('view', input.value);
             window.history.replaceState(null, '', nextUrl);
+            if (input.value === 'masonry') {
+                globalThis.booruLayoutMasonry?.();
+            } else {
+                globalThis.booruClearMasonry?.();
+            }
         });
     });
+
+    globalThis.booruLayoutMasonry?.();
 });`,
                     }}
                 />
