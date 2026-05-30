@@ -50,6 +50,7 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     loading='lazy'
                     width={image.width}
                     height={image.height}
+                    style={`aspect-ratio: ${image.width}/${image.height}`}
                     hx-get={imageInspect}
                     hx-target='#inspector-content'
                     hx-swap='innerHTML'

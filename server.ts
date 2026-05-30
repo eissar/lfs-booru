@@ -425,7 +425,14 @@ function createHandler(
                 .catch(() => c.error('ERROR: could not apply event'));
             if (applyResult instanceof Response) return applyResult;
 
-            return c.json({ oid: thumbnailOid, size: thumbnailSize });
+            // TODO: maybe just send image bytes since we have them right here
+            // but w/e
+
+            // update local copy of the image, make a new card
+            if (event.contentType) image.contentType = event.contentType;
+            image.thumbnailOid = event.thumbnailOid;
+
+            return c.html(await render.renderImageCard({ ...image, id: id }));
         }
 
         if (url.pathname === '/update-metadata' && req.method === 'POST') {

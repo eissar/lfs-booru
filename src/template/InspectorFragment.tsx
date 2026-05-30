@@ -34,9 +34,27 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                 alt={image.name}
                 class='aspect-square w-full rounded-lg object-cover'
             />
-            <p class='text-xs text-muted'>
-                {`${image.width} × ${image.height}`}
-            </p>
+            <div class='flex'>
+                <p class='text-xs text-muted w-full'>
+                    {`${image.width} × ${image.height}\t|\t${image.contentType}`}
+                </p>
+                <button
+                    type='button'
+                    id='inspector-header-refresh'
+                    hx-get='/regen-thumbnail'
+                    hx-include='#inspector-content input[name=oid]'
+                    hx-target={`article[data-image-id="${image.id}"]`}
+                    hx-swap='outerHTML'
+                    class='rounded p-1 hover-surface'
+                >
+                    <img
+                        src='https://unpkg.com/heroicons@2.0.18/24/outline/arrow-path.svg'
+                        class='h-4 w-4'
+                        style='filter: var(--icon-filter);'
+                        alt='Refresh'
+                    />
+                </button>
+            </div>
             <form
                 hx-post='/update-metadata'
                 hx-target='#inspector-content'

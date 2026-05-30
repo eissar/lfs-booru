@@ -1,5 +1,5 @@
-import type { ItemsFilter } from '@/index_store.ts';
 import { MASONRY_LAYOUT_SCRIPT } from '@/template/masonryScript.ts';
+import type { ItemsFilter } from '@/index_store.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 
 function HiddenInput({ name, value }: { name: string; value: string }) {
@@ -76,26 +76,15 @@ function InspectorShell() {
                     <div class='ml-auto flex items-center gap-1'>
                         <button
                             type='button'
-                            id='inspector-header-refresh'
-                            hx-get='/regen-thumbnail'
-                            hx-include='#inspector-content input[name=oid]'
-                            hx-target='#inspector-content'
-                            hx-swap='innerHTML'
-                            class='rounded p-1 hover-surface'
-                        >
-                            <img
-                                src='https://unpkg.com/heroicons@2.0.18/24/outline/arrow-path.svg'
-                                class='h-4 w-4'
-                                style='filter: var(--icon-filter);'
-                                alt='Refresh'
-                            />
-                        </button>
-                        <button
-                            type='button'
                             class='rounded p-1 hover-surface'
                             data-hx-on--click="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
                         >
-                            <img src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg' class='h-4 w-4' style='filter: var(--icon-filter);' alt='Close' />
+                            <img
+                                src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
+                                class='h-4 w-4'
+                                style='filter: var(--icon-filter);'
+                                alt='Close'
+                            />
                         </button>
                     </div>
                 </header>
