@@ -601,6 +601,7 @@ function applyEventToIndexState(
             const img = imageState[id];
             if (!img) break;
             img.thumbnailOid = event.thumbnailOid;
+            if (event.contentType) img.contentType = event.contentType;
             break;
         }
         case 'update_metadata': {

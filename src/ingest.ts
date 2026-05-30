@@ -95,7 +95,7 @@ function detectEbmlFileExtension(fileBuffer: Uint8Array): string | null {
     return 'mkv';
 }
 
-function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
+export function detectMediaFileExtension(fileBuffer: Uint8Array): string | null {
     if (isPng(fileBuffer)) return 'png';
     if (isJpeg(fileBuffer)) return 'jpg';
     if (isGif(fileBuffer)) return 'gif';

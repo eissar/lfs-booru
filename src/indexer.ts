@@ -62,6 +62,7 @@ export type RegenThumbnailEvent = {
     op: 'regen_thumbnail';
     id: number;
     thumbnailOid: string;
+    contentType?: string;
 };
 
 export type UpdateMetadataEvent = {

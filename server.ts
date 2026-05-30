@@ -1,5 +1,6 @@
 import { serveDir } from '@std/http/file-server';
 import { dirname, join } from '@std/path';
+import { typeByExtension } from '@std/media-types';
 
 import { GitConstructError, GitError, simpleGit, TaskConfigurationError } from 'simple-git';
 
@@ -10,6 +11,7 @@ import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
 import { processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
+import { detectMediaFileExtension } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
@@ -58,7 +60,7 @@ export async function reloadThumbnail(
     store: DerivedIndexStore,
     oid: string,
     fileExtension: string,
-): Promise<{ oid: string; size: number }> {
+): Promise<{ oid: string; size: number; contentType: string }> {
     // Read the original media file bytes.
     const id = await store.getIdByOid(oid);
     if (!id) throw new Error(`Could not find image id for oid "${oid}"`);
@@ -68,6 +70,11 @@ export async function reloadThumbnail(
 
     const mediaPath = join(lib.path, image.path);
     const bytes = await Deno.readFile(mediaPath);
+
+    const detectedExtension = detectMediaFileExtension(bytes);
+    const contentType = detectedExtension
+        ? typeByExtension(`.${detectedExtension}`) ?? 'application/octet-stream'
+        : 'application/octet-stream';
 
     // Generate a fresh thumbnail.
     const { blob: thumbnailBlob, oid: thumbnailOid, size: thumbnailSize } = await generateThumbnail(
@@ -81,7 +88,7 @@ export async function reloadThumbnail(
     await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
     await Deno.writeFile(thumbnailPath, thumbnailBytes);
 
-    return { oid: thumbnailOid, size: thumbnailSize };
+    return { oid: thumbnailOid, size: thumbnailSize, contentType };
 }
 
 /**
@@ -389,7 +396,7 @@ function createHandler(
             if (!image) return c.error(`Could not find image state for id "${id}"`, 404);
 
             const fileExtension = image.path.split('.').pop() ?? 'jpg';
-            const { oid: thumbnailOid, size: thumbnailSize } = await reloadThumbnail(
+            const { oid: thumbnailOid, size: thumbnailSize, contentType } = await reloadThumbnail(
                 lib,
                 store,
                 oid,
@@ -400,6 +407,7 @@ function createHandler(
                 op: 'regen_thumbnail',
                 id: Number(id),
                 thumbnailOid,
+                contentType,
             };
 
             const appendResult = await eventLog.appendWithRollback(event, async (_appendResult) => {
