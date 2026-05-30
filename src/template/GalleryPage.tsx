@@ -1,6 +1,9 @@
 import { MASONRY_LAYOUT_SCRIPT } from '@/template/masonryScript.ts';
 import type { ItemsFilter } from '@/index_store.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
+import PhotoGrid from './PhotoGridFragment.tsx';
+import { ComponentChildren } from 'preact';
+import { HtmlRenderer } from '../renderer.tsx';
 
 function HiddenInput({ name, value }: { name: string; value: string }) {
     return <input type='hidden' name={name} value={value} />;
@@ -128,14 +131,17 @@ function SortOptions({ sort }: { sort: ItemsFilter['sort'] }) {
     );
 }
 
+// initial page load
 export function GalleryPage({
     title,
     version,
     search,
+    params,
 }: {
     title: string;
     version: string;
     search: ItemsFilter;
+    params: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
 }) {
     const hiddenTagInputs = search?.tags?.map((tag) => <HiddenInput key={tag} name='tags' value={tag} />);
 
@@ -420,18 +426,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         </div>
                         <div id='gallery-layout' class='layout'>
                             <section class='main-content'>
-                                <div id='photo-grid' class='masonry-grid'>
-                                    <div
-                                        hx-get='/fragment/items'
-                                        hx-trigger='load'
-                                        hx-target='#photo-grid'
-                                        hx-swap='outerHTML'
-                                        hx-include='#filter-bar,#preferences,#pagination-controls'
-                                        class='gallery-status gallery-loading'
-                                    >
-                                        Loading initial content...
-                                    </div>
-                                </div>
+                                <PhotoGrid
+                                    cards={params.cards}
+                                    offset={params.offset}
+                                    hasMore={params.hasMore}
+                                />
                             </section>
                         </div>
                     </div>

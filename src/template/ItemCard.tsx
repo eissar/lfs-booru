@@ -54,6 +54,7 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     hx-get={imageInspect}
                     hx-target='#inspector-content'
                     hx-swap='innerHTML'
+                    data-hx-on--click="document.getElementById('gallery-main')?.classList.add('inspector-open')"
                     class='gallery-card-image transition-transform duration-300 peer-hover:scale-105 order-1'
                 />
             </div>

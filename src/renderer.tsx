@@ -38,6 +38,7 @@ export interface HtmlRenderer {
         filter: ItemsFilter;
         /** Page title. */
         title: string;
+        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
     }): Promise<string>;
 
     /**
@@ -107,6 +108,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         filter: ItemsFilter;
         /** Page title. */
         title: string;
+        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
     }): Promise<string> {
         const cacheKey = await sha1Hex(JSON.stringify({
             kind: 'gallery-page',
@@ -123,7 +125,14 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         if (cached !== null) return cached;
 
         const html = `<!DOCTYPE html>\n${
-            renderToString(<GalleryPage title={input.title} version={this.version} search={input.filter} />)
+            renderToString(
+                <GalleryPage
+                    title={input.title}
+                    version={this.version}
+                    search={input.filter}
+                    params={input.photoGridParam}
+                />,
+            )
         }`;
 
         await Deno.mkdir(cacheDir, { recursive: true });

@@ -147,6 +147,12 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         let limit = Number(url.searchParams.get('limit'));
         if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
 
+        let offset: number | false = false;
+        if (url.searchParams.has('offset')) {
+            offset = Number(url.searchParams.get('offset'));
+            if (!isInt(offset) || offset < 0) return c.error('invalid offset');
+        }
+
         const tags = url.searchParams.getAll('tags')
             .flatMap((value) => value.split(','))
             .map((tag) => tag.trim())
@@ -157,10 +163,38 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
             if (match !== undefined) sort = match;
         }
+        const search: ItemsFilter = { limit, tags, sort };
+
+        let itemsList;
+
+        // if we call /gallery with an offset
+        // overwrite here instead of setting search.limit
+        // handle update by ref or st
+        if (offset) itemsList = store.listItems({ ...search, limit: (limit + offset) });
+        else itemsList = store.listItems({ ...search, limit });
+
+        const cards = [];
+
+        for await (const [id, img] of itemsList) {
+            const image = { ...img, id: id };
+            if (img.oid) cards.push(ItemCard({ image: image }));
+        }
+
+        let hasMore = true;
+
+        // more accurately, store.listItems returns len items gt filter.limit
+        // but this is the easier, stateless way to do this without refactoring
+        // that function
+        if (limit > cards.length) hasMore = false;
+
+        if (offset) offset = offset + cards.length;
+        else offset = cards.length;
+
         return c.html(
             await render.renderGalleryPage({
-                filter: { limit, tags, sort },
+                filter: search,
                 title: 'Gallery',
+                photoGridParam: { cards, offset: String(offset), hasMore },
             }),
         );
     }
