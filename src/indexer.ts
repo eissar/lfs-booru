@@ -64,7 +64,15 @@ export type RegenThumbnailEvent = {
     thumbnailOid: string;
 };
 
-export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent | RegenThumbnailEvent;
+export type UpdateMetadataEvent = {
+    op: 'update_metadata';
+    id: number;
+    patch: {
+        name?: string;
+    };
+};
+
+export type Event = AddEvent | TagAddEvent | TagRemoveEvent | DeleteEvent | RegenThumbnailEvent | UpdateMetadataEvent;
 
 export type TagIndex = Record<string, string[]>;
 

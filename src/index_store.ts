@@ -70,7 +70,6 @@ export interface DerivedIndexStore {
 
     getImage(id: string): Promise<ImageState | null>;
 
-
     getIdByOid(oid: string): Promise<string | null>;
 
     /**
@@ -602,6 +601,13 @@ function applyEventToIndexState(
             const img = imageState[id];
             if (!img) break;
             img.thumbnailOid = event.thumbnailOid;
+            break;
+        }
+        case 'update_metadata': {
+            const img = imageState[id];
+            if (!img) break;
+
+            if (event.patch.name !== undefined) img.name = event.patch.name;
             break;
         }
     }

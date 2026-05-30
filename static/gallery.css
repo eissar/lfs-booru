@@ -42,6 +42,7 @@ body.light-mode {
     --border-color-light: #e2e8f0;
     --shadow-color: rgb(0 0 0 / 8%);
     --shadow-color-hover: rgb(0 0 0 / 15%);
+    --accent-indigo: #6366f1;
     --icon-filter: brightness(0) saturate(100%) invert(20%) sepia(15%) saturate(1200%) hue-rotate(174deg) brightness(
         90%
     ) contrast(95%);
@@ -63,6 +64,7 @@ body.dark-mode {
     --border-color-light: #334155;
     --shadow-color: rgb(0 0 0 / 30%);
     --shadow-color-hover: rgb(0 0 0 / 50%);
+    --accent-indigo: #818cf8;
     --icon-filter: brightness(0) saturate(100%) invert(64%) sepia(11%) saturate(1015%) hue-rotate(174deg) brightness(
         95%
     ) contrast(87%);
@@ -105,6 +107,7 @@ body.dark-mode {
     --border-color-light: #334155;
     --shadow-color: rgb(0 0 0 / 30%);
     --shadow-color-hover: rgb(0 0 0 / 50%);
+    --accent-indigo: #818cf8;
     --icon-filter: brightness(0) saturate(100%) invert(64%) sepia(11%) saturate(1015%) hue-rotate(174deg) brightness(
         95%
     ) contrast(87%);
@@ -201,6 +204,26 @@ body.light-mode .font-semibold {
 
 body.light-mode .font-bold {
     font-weight: 700;
+}
+
+.text-accent-indigo {
+    color: var(--accent-indigo);
+}
+
+.input-focus-underline {
+    background-color: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    padding-block: 0;
+    margin: 0;
+    line-height: 1.5;
+    outline: none;
+    transition: box-shadow 0.15s;
+}
+
+.input-focus-underline:focus {
+    box-shadow: 0 2px 0 0 var(--accent-indigo);
 }
 
 /* Improve input field visibility */
@@ -613,9 +636,7 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
     overflow-wrap: anywhere;
 }
 
-.inspector-close {
-    color: var(--text-primary);
-}
+
 
 .main-scroll {
     overflow: hidden;

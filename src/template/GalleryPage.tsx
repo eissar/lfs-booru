@@ -92,10 +92,10 @@ function InspectorShell() {
                         </button>
                         <button
                             type='button'
-                            class='inspector-close rounded px-2 py-1 text-sm font-medium hover-surface'
+                            class='rounded p-1 hover-surface'
                             data-hx-on--click="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
                         >
-                            ×
+                            <img src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg' class='h-4 w-4' style='filter: var(--icon-filter);' alt='Close' />
                         </button>
                     </div>
                 </header>

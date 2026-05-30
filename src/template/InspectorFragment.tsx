@@ -34,30 +34,59 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                 alt={image.name}
                 class='aspect-square w-full rounded-lg object-cover'
             />
-            <div class='space-y-1'>
-                <h3 class='text-sm font-semibold break-words'>{image.name}</h3>
-                <p class='text-xs text-muted'>
-                    {`${image.width} × ${image.height}`}
-                </p>
-            </div>
-            <dl class='space-y-3 text-sm'>
-                <div>
-                    <dt class='font-medium'>OID</dt>
-                    <dd class='text-xs break-all text-muted'>{image.oid}</dd>
-                </div>
-                <div>
-                    <dt class='font-medium'>Path</dt>
-                    <dd class='text-xs break-all text-muted'>{image.path}</dd>
-                </div>
-                <div>
-                    <dt class='font-medium'>Added</dt>
-                    <dd class='text-xs text-muted'>{image.addedAt}</dd>
-                </div>
-                <div>
-                    <dt class='font-medium'>Modified</dt>
-                    <dd class='text-xs text-muted'>{image.mtime}</dd>
-                </div>
-            </dl>
+            <p class='text-xs text-muted'>
+                {`${image.width} × ${image.height}`}
+            </p>
+            <form
+                hx-post='/update-metadata'
+                hx-target='#inspector-content'
+                hx-swap='outerHTML'
+            >
+                <ul class='space-y-4'>
+                    <li class='flex flex-col gap-1'>
+                        <span class='relative self-start inline-block font-medium text-sm'>
+                            Name
+                        </span>
+                        <form class='flex items-center gap-2'>
+                            <input type='hidden' name='id' value={image.id} />
+                            <input
+                                id={`image-name-${image.id}`}
+                                class='flex-1 min-w-0 input-focus-underline text-xs text-muted'
+                                type='text'
+                                name='name'
+                                defaultValue={image.name}
+                                required
+                                autoComplete='off'
+                                spellcheck={false}
+                            />
+                            <button type='submit' class='rounded p-1 hover-surface'>
+                                <img
+                                    src='https://unpkg.com/heroicons@2.0.18/24/outline/check.svg'
+                                    alt='Save'
+                                    class='h-4 w-4'
+                                    style='filter: var(--icon-filter);'
+                                />
+                            </button>
+                        </form>
+                    </li>
+                    <li class='flex flex-col gap-2'>
+                        <span class='font-medium shrink-0'>OID</span>
+                        <span class='text-xs break-all text-muted'>{image.oid}</span>
+                    </li>
+                    <li class='flex flex-col gap-2'>
+                        <span class='font-medium shrink-0'>Path</span>
+                        <span class='text-xs break-all text-muted'>{image.path}</span>
+                    </li>
+                    <li class='flex flex-col gap-2'>
+                        <span class='font-medium shrink-0'>Added</span>
+                        <span class='text-xs text-muted'>{image.addedAt}</span>
+                    </li>
+                    <li class='flex flex-col gap-2'>
+                        <span class='font-medium shrink-0'>Modified</span>
+                        <span class='text-xs text-muted'>{image.mtime}</span>
+                    </li>
+                </ul>
+            </form>
             <div>
                 <h4 class='mb-2 text-sm font-medium'>Tags</h4>
                 <div class='flex flex-wrap gap-2'>

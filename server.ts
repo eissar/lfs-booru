@@ -8,7 +8,7 @@ import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
-import { AddEvent, processEvents, type RegenThumbnailEvent } from '@/indexer.ts';
+import { processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
@@ -165,8 +165,8 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         const list = store.listImagesByIds([id]);
 
         // just return the first
-        for await (const [_id, img] of list) {
-            return c.html(await render.renderInspector(img));
+        for await (const [id, img] of list) {
+            return c.html(await render.renderInspector({ ...img, id }));
         }
     }
 
@@ -418,6 +418,49 @@ function createHandler(
             if (applyResult instanceof Response) return applyResult;
 
             return c.json({ oid: thumbnailOid, size: thumbnailSize });
+        }
+
+        if (url.pathname === '/update-metadata' && req.method === 'POST') {
+            const form = await req.formData();
+
+            const idRaw = form.get('id');
+            const nameRaw = form.get('name');
+
+            if (typeof idRaw !== 'string') return c.error('Missing form field: id', 400);
+            if (typeof nameRaw !== 'string') return c.error('Missing form field: name', 400);
+
+            const id = Number(idRaw);
+            if (!isInt(id) || id < 1) return c.error(`Invalid image id: "${idRaw}"`, 400);
+
+            const image = await store.getImage(String(id));
+            if (!image) return c.error(`Could not find image state for id "${id}"`, 404);
+
+            const name = nameRaw.trim();
+            if (name.length === 0) return c.error('Invalid image name: value is empty', 400);
+
+            if (name === image.name) return c.html(await render.renderInspector({ ...image, id: String(id) }));
+
+            const event: UpdateMetadataEvent = {
+                op: 'update_metadata',
+                id,
+                patch: { name },
+            };
+
+            const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+                await stageAndCommit([appendResult.path], `booru: update image ${id} metadata`, lib);
+            }).catch((err: unknown) => {
+                if (err instanceof Response) return err;
+                return c.error(`update-metadata failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+            });
+
+            if (appendResult instanceof Error) return c.error('error during event writing.', 500);
+            if (appendResult instanceof Response) return appendResult;
+
+            const applyResult = await store.applyEvent(event, appendResult.cursor)
+                .catch(() => c.error('ERROR: could not apply event'));
+            if (applyResult instanceof Response) return applyResult;
+
+            return c.html(await render.renderInspector({ ...image, name, id: String(id) }));
         }
 
         if (url.pathname.startsWith('/static')) {
