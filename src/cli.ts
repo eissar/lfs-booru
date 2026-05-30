@@ -24,7 +24,7 @@ const HOME = Deno.env.get('HOME') || Deno.env.get('USERPROFILE');
 // await load({ envPath: resolve(XDG_CONFIG_HOME, 'user-dirs.dirs'), export: true });
 
 const DOCS = Deno.env.get('XDG_DOCUMENTS_DIR') || `${HOME}/Documents`;
-const DEFAULT_BOORU_LIBRARY_PATH = `${DOCS}/Libraries/Default`;
+const DEFAULT_BOORU_LIBRARY_PATH = Deno.env.get('DEFAULT_BOORU_LIBRARY_PATH') || `${DOCS}/Libraries/Default`;
 
 /**
  * Read an environment variable or throw if it is unset or empty.
