@@ -27,8 +27,6 @@ export const MASONRY_LAYOUT_SCRIPT = javascript`(function () {
         var grid = document.getElementById('photo-grid');
         if (!grid) return;
 
-        clearMasonryLayout();
-
         var styles = getComputedStyle(grid);
         var parsedColumns = Number.parseInt(styles.getPropertyValue('--masonry-columns'), 10);
         var columns = Number.isFinite(parsedColumns) && parsedColumns > 0 ? parsedColumns : 1;
@@ -73,6 +71,19 @@ export const MASONRY_LAYOUT_SCRIPT = javascript`(function () {
 
     globalThis.booruLayoutMasonry = layoutMasonry;
     globalThis.booruClearMasonry = clearMasonryLayout;
+
+    [
+        '(min-width: 768px)',
+        '(min-width: 1024px)',
+        '(min-width: 1280px)',
+    ].forEach(function (query) {
+        matchMedia(query).addEventListener('change', function () {
+            requestAnimationFrame(function () {
+                globalThis.booruClearMasonry?.();
+                globalThis.booruLayoutMasonry?.();
+            });
+        });
+    });
 
     document.addEventListener('htmx:afterSettle', layoutMasonry);
 })();`;

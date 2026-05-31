@@ -1,9 +1,98 @@
-import { chromium } from 'npm:playwright@1.57.0';
+import { chromium, type Page } from 'npm:playwright@1.57.0';
 
 const BASE_URL = Deno.env.get('BOORU_BASE_URL') ?? 'http://127.0.0.1:8000';
 
 function overlaps(a: DOMRect, b: DOMRect): boolean {
     return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+}
+
+type CardLayoutSnapshot = {
+    id: string;
+    column: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
+
+async function captureMasonryCardLayout(page: Page): Promise<CardLayoutSnapshot[]> {
+    return await page.evaluate(() => {
+        const grid = document.getElementById('photo-grid');
+        if (!grid) throw new Error('Cannot snapshot masonry cards: #photo-grid missing');
+
+        const gridRect = grid.getBoundingClientRect();
+        const columns = Array.from(document.querySelectorAll<HTMLElement>('#photo-grid > .masonry-column'));
+
+        return Array.from(document.querySelectorAll<HTMLElement>('#photo-grid article.masonry-item')).map((article) => {
+            const id = article.dataset.imageId;
+            if (!id) throw new Error('Cannot snapshot masonry card: data-image-id missing');
+
+            const column = columns.indexOf(article.parentElement as HTMLElement);
+            if (column < 0) throw new Error(`Cannot snapshot masonry card "${id}": card is not in a masonry column`);
+
+            const rect = article.getBoundingClientRect();
+            return {
+                id,
+                column,
+                left: Math.round(rect.left - gridRect.left),
+                top: Math.round(rect.top - gridRect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            };
+        });
+    });
+}
+
+function assertStableMasonryCards(
+    before: CardLayoutSnapshot[],
+    after: CardLayoutSnapshot[],
+    context: string,
+): void {
+    const afterById = new Map(after.map((snapshot) => [snapshot.id, snapshot]));
+
+    for (const expected of before) {
+        const actual = afterById.get(expected.id);
+        if (!actual) throw new Error(`${context}: card "${expected.id}" missing after append`);
+
+        if (actual.column !== expected.column) {
+            throw new Error(
+                `${context}: card "${expected.id}" moved columns: expected ${expected.column}, got ${actual.column}`,
+            );
+        }
+
+        for (const property of ['left', 'top', 'width', 'height'] as const) {
+            if (Math.abs(actual[property] - expected[property]) > 1) {
+                throw new Error(
+                    `${context}: card "${expected.id}" changed ${property}: expected ${expected[property]}, got ${
+                        actual[property]
+                    }`,
+                );
+            }
+        }
+    }
+}
+
+async function assertNextMasonryAppendIsAdditive(page: Page, context: string): Promise<boolean> {
+    const button = page.locator('#pagination-controls button');
+    if (await button.count() === 0) return false;
+
+    const before = await captureMasonryCardLayout(page);
+    if (before.length < 2) return false;
+
+    await button.click();
+    await page.waitForFunction((count) => {
+        const total = document.querySelectorAll('#photo-grid article.masonry-item').length;
+        const pending = document.querySelectorAll('#photo-grid > article.masonry-item').length;
+        return total > count && pending === 0;
+    }, before.length);
+
+    const after = await captureMasonryCardLayout(page);
+    if (after.length <= before.length) {
+        throw new Error(`${context}: append did not add cards: before ${before.length}, after ${after.length}`);
+    }
+
+    assertStableMasonryCards(before, after, context);
+    return true;
 }
 
 Deno.test('cards in #photo-grid do not overlap', async () => {
@@ -206,6 +295,41 @@ Deno.test('inspector panel opens and closes without breaking layout', async () =
         if (closedWidth > 1) {
             throw new Error(`Inspector width not zero after close: ${closedWidth}px`);
         }
+    } finally {
+        await browser.close();
+    }
+});
+
+Deno.test('masonry appends do not move existing cards', async () => {
+    const browser = await chromium.launch({ headless: !Deno.env.get('DISPLAY') });
+
+    try {
+        const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+        let response = await page.goto(`${BASE_URL}/gallery`, { waitUntil: 'networkidle' });
+        if (!response?.ok()) {
+            throw new Error(`Cannot load gallery page: expected 200, got ${response?.status()}`);
+        }
+
+        const testedInitialAppend = await assertNextMasonryAppendIsAdditive(page, 'initial masonry append');
+        if (!testedInitialAppend) return;
+
+        response = await page.goto(`${BASE_URL}/gallery`, { waitUntil: 'networkidle' });
+        if (!response?.ok()) {
+            throw new Error(`Cannot reload gallery page: expected 200, got ${response?.status()}`);
+        }
+
+        await page.setViewportSize({ width: 640, height: 1200 });
+        await page.waitForTimeout(200);
+        await page.setViewportSize({ width: 1400, height: 1200 });
+        await page.waitForTimeout(200);
+        await page.locator('label[for="gallery-view-grid"]').click();
+        await page.waitForTimeout(100);
+        await page.locator('label[for="gallery-view-list"]').click();
+        await page.waitForTimeout(100);
+        await page.locator('label[for="gallery-view-masonry"]').click();
+        await page.waitForTimeout(100);
+
+        await assertNextMasonryAppendIsAdditive(page, 'masonry append after resize and view changes');
     } finally {
         await browser.close();
     }
