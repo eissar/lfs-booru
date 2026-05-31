@@ -574,22 +574,20 @@ async function Start() {
     const eventLog: EventLog = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
 
-    const indexFlag = cfg.rebuildIndex || !(await store.isInitialized());
+    const needsInitialize = cfg.rebuildIndex || !(await store.isInitialized());
 
     // todo: end process flags
 
     debug(`library=${lib.path}`);
 
-    // TODO:
-    // if (indexFlag) console.log('Attempting re-index from last checkpoint')
     if (cfg.rebuildIndex) console.log('Rebuilding index from committed events — this may take some time.');
-    else if (indexFlag) console.log('Initializing index from scratch — this may take some time.');
-    debug(`indexFlag=${indexFlag} rebuildIndex=${cfg.rebuildIndex} IndexStoreBackend=${store.constructor.name}`);
+    else if (needsInitialize) console.log('Initializing index from scratch — this may take some time.');
+    debug(`needsInitialize=${needsInitialize} rebuildIndex=${cfg.rebuildIndex} IndexStoreBackend=${store.constructor.name}`);
 
-    if (indexFlag) {
+    if (needsInitialize) {
         await store.initializeEmptyIndex();
-        await processEvents(store, eventLog);
     }
+    await processEvents(store, eventLog);
 
     if (cfg.pack) {
         console.log(`Importing Eagle pack: ${cfg.pack}`);
