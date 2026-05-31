@@ -80,7 +80,7 @@ function InspectorShell() {
                         <button
                             type='button'
                             class='rounded p-1 hover-surface'
-                            data-hx-on--click="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
+                            onClick="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
                         >
                             <img
                                 src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
@@ -354,7 +354,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                         id='inspector-toggle'
                                         type='button'
                                         class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
-                                        data-hx-on--click="document.getElementById('gallery-main')?.classList.toggle('inspector-open')"
+                                        onClick="document.getElementById('gallery-main')?.classList.toggle('inspector-open')"
                                     >
                                         <img
                                             src='https://unpkg.com/heroicons@2.0.18/24/outline/information-circle.svg'

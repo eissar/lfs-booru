@@ -582,7 +582,9 @@ async function Start() {
 
     if (cfg.rebuildIndex) console.log('Rebuilding index from committed events — this may take some time.');
     else if (needsInitialize) console.log('Initializing index from scratch — this may take some time.');
-    debug(`needsInitialize=${needsInitialize} rebuildIndex=${cfg.rebuildIndex} IndexStoreBackend=${store.constructor.name}`);
+    debug(
+        `needsInitialize=${needsInitialize} rebuildIndex=${cfg.rebuildIndex} IndexStoreBackend=${store.constructor.name}`,
+    );
 
     if (needsInitialize) {
         await store.initializeEmptyIndex();
