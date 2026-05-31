@@ -95,11 +95,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     }
 
     /**
-     * Render and cache a gallery page under `index/artifacts/gallery-pages`.
-     *
-     * Cache identity includes the renderer version, page title, and filter state.
-     * If a matching artifact exists, the cached HTML is returned without
-     * rendering or rewriting it.
+     * Render a gallery page.
      *
      * @param input Gallery page title and filter state.
      * @returns Rendered gallery page HTML.
@@ -110,21 +106,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         title: string;
         photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
     }): Promise<string> {
-        const cacheKey = await sha1Hex(JSON.stringify({
-            kind: 'gallery-page',
-            version: this.version,
-            input: input,
-        }));
-        const cacheDir = join(this.artifactsPath, 'gallery-pages');
-        const cachePath = join(cacheDir, `${cacheKey}.html`);
-
-        const cached = await Deno.readTextFile(cachePath).catch((error) => {
-            if (error instanceof Deno.errors.NotFound) return null;
-            throw error;
-        });
-        if (cached !== null) return cached;
-
-        const html = `<!DOCTYPE html>\n${
+        return await Promise.resolve(`<!DOCTYPE html>\n${
             renderToString(
                 <GalleryPage
                     title={input.title}
@@ -133,20 +115,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
                     params={input.photoGridParam}
                 />,
             )
-        }`;
-
-        await Deno.mkdir(cacheDir, { recursive: true });
-
-        const tmpPath = join(cacheDir, `${cacheKey}.tmp`);
-        await Deno.writeTextFile(tmpPath, html);
-        await Deno.rename(tmpPath, cachePath).catch(async (error) => {
-            await Deno.remove(tmpPath).catch((removeError) => {
-                if (!(removeError instanceof Deno.errors.NotFound)) throw removeError;
-            });
-            throw error;
-        });
-
-        return html;
+        }`);
     }
 
     /** {@inheritDoc HtmlRenderer.renderInspector} */
@@ -166,11 +135,4 @@ export class CachingHtmlRenderer implements HtmlRenderer {
             renderToString(<PhotoGrid cards={input.cards} offset={input.offset} hasMore={input.hasMore} />),
         );
     }
-}
-
-async function sha1Hex(value: string): Promise<string> {
-    const hash = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(value));
-    return Array.from(new Uint8Array(hash))
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join('');
 }
