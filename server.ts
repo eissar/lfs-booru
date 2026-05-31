@@ -347,7 +347,7 @@ function createHandler(
             const form = await req.formData();
 
             const file = form.get('image') as File | null;
-            if (!file) throw new Error('missing form field: image');
+            if (!file) return c.error('missing form field: image', 400);
 
             const tagsRaw = (form.get('tags') as string) || '[]';
 
@@ -360,7 +360,7 @@ function createHandler(
                 })
                 .catch(() => null);
 
-            if (!tags) throw new Error('tags must be a JSON array of strings');
+            if (!tags) return c.error('tags must be a JSON array of strings', 400);
 
             const name = form.get('name') as string;
 
