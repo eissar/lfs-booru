@@ -248,7 +248,9 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const statePath = join(this.conn.path, 'index', 'image_state.json');
 
         const imageState = await readJsonFile<ImageStateIndex>(statePath);
-        return imageState[id] ?? null;
+        const img = imageState[id] ?? null;
+        if (img?.isDeleted) return null;
+        return img;
     }
 
     async getIdByOid(oid: string): Promise<string | null> {
@@ -259,6 +261,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const imageState = await readJsonFile<ImageStateIndex>(statePath);
 
         for (const [id, image] of Object.entries(imageState)) {
+            if (image.isDeleted) continue;
             if (image.oid === oid) return id;
         }
         return null;
@@ -433,6 +436,8 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         });
 
         for (const [id, imageState] of sortedEntries) {
+            if (imageState.isDeleted) continue;
+
             if (options.tags && options.tags.length > 0) {
                 const matches = options.tags.some((t) => imageState.tags.includes(t));
                 if (!matches) continue;
@@ -470,6 +475,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         let yielded = 0;
         for (const [id, image] of entries) {
             if (!ids.includes(id)) continue;
+            if (image.isDeleted) continue;
             yield [id, image];
 
             yielded++;
@@ -487,7 +493,7 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         const tagIndex = await readJsonFile<TagIndex>(indexPath);
 
         return {
-            images: Object.keys(imageState).length,
+            images: Object.values(imageState).filter((img) => !img.isDeleted).length,
             tags: Object.keys(tagIndex).length,
         };
     }
@@ -587,14 +593,14 @@ function applyEventToIndexState(
         }
         case 'tag_add': {
             const img = imageState[id];
-            if (!img) break;
+            if (!img || img.isDeleted) break;
             if (!img.tags.includes(event.tag)) img.tags.push(event.tag);
             addToTag(tagIndex, event.tag, id);
             break;
         }
         case 'tag_remove': {
             const img = imageState[id];
-            if (!img) break;
+            if (!img || img.isDeleted) break;
             img.tags = img.tags.filter((tag) => tag !== event.tag);
             removeFromTag(tagIndex, event.tag, id);
             break;
@@ -603,20 +609,20 @@ function applyEventToIndexState(
             const img = imageState[id];
             if (img) {
                 for (const tag of img.tags) removeFromTag(tagIndex, tag, id);
+                img.isDeleted = true;
             }
-            delete imageState[id];
             break;
         }
         case 'regen_thumbnail': {
             const img = imageState[id];
-            if (!img) break;
+            if (!img || img.isDeleted) break;
             img.thumbnailOid = event.thumbnailOid;
             if (event.contentType) img.contentType = event.contentType;
             break;
         }
         case 'update_metadata': {
             const img = imageState[id];
-            if (!img) break;
+            if (!img || img.isDeleted) break;
 
             if (event.patch.name !== undefined) img.name = event.patch.name;
             break;

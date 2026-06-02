@@ -9,7 +9,7 @@ import type { EventLog } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
-import { processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
+import { type DeleteEvent, processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { detectMediaFileExtension } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
@@ -512,6 +512,36 @@ function createHandler(
             if (applyResult instanceof Response) return applyResult;
 
             return c.html(await render.renderInspector({ ...image, name, id: String(id) }));
+        }
+
+        if (url.pathname === '/delete' && req.method === 'POST') {
+            const form = await req.formData();
+            const idRaw = form.get('id');
+
+            if (typeof idRaw !== 'string') return c.error('Missing form field: id', 400);
+
+            const id = Number(idRaw);
+            if (!isInt(id) || id < 1) return c.error(`Invalid image id: "${idRaw}"`, 400);
+
+            const event: DeleteEvent = { op: 'delete', id };
+
+            const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
+                await stageAndCommit([appendResult.path], `booru: delete image ${id}`, lib);
+            }).catch((err: unknown) => {
+                if (err instanceof Response) return err;
+                return c.error(`delete failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+            });
+
+            if (appendResult instanceof Error) return c.error('error during event writing.', 500);
+            if (appendResult instanceof Response) return appendResult;
+
+            const applyResult = await store.applyEvent(event, appendResult.cursor)
+                .catch(() => c.error('ERROR: could not apply event'));
+            if (applyResult instanceof Response) return applyResult;
+
+            // TODO: invalidate gallery page cache after delete
+
+            return c.text('ok');
         }
 
         if (url.pathname.startsWith('/static')) {

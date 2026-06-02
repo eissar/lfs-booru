@@ -24,6 +24,7 @@ export type ImageState = {
     mtime: string;
     addedAt: string;
     contentType: string;
+    isDeleted?: true;
 };
 
 export type AddEvent = {
