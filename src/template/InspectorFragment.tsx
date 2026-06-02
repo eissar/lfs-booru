@@ -28,7 +28,7 @@ export default function Inspector({ image }: { image: GalleryImage }) {
 
     return (
         <section class='space-y-4'>
-            <input type='hidden' name='oid' value={image.oid} />
+            <input type='hidden' name='id' value={image.id} />
             <img
                 src={thumbSrc}
                 alt={image.name}
@@ -42,7 +42,7 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                     type='button'
                     id='inspector-header-refresh'
                     hx-get='/regen-thumbnail'
-                    hx-include='#inspector-content input[name=oid]'
+                    hx-include='#inspector-content input[name=id]'
                     hx-target={`article[data-image-id="${image.id}"]`}
                     hx-swap='outerHTML'
                     class='rounded p-1 hover-surface'

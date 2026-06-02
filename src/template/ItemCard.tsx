@@ -22,7 +22,7 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
     let thumbSrc = `/image/${image.oid}`;
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
-    const imageInspect = `/fragment/inspect/${image.oid}`;
+    const imageInspect = `/fragment/inspect/${image.id}`;
 
     return (
         <article class='masonry-item group' data-image-id={image.id}>

@@ -108,6 +108,16 @@ export interface DerivedIndexStore {
      * eventLog + IndexStore backend, not accross backends
      * since I don't want to deal with making it deterministic like that
      *
+     * Mature CAS systems separate content addressing from catalog identity:
+     * Git uses tree objects (blob hash + path), Spacedrive assigns per-file
+     * UUIDs alongside BLAKE3 content hashes, IPFS CIDs carry codec and
+     * structure metadata beyond the raw hash. Here the numeric ID serves
+     * as the catalog entry identity while the OID (SHA-256) is the content
+     * address. Routes that address a specific entry (inspector, metadata
+     * edit, thumbnail regen) must use the ID; routes that serve raw bytes
+     * (image serving) may use the OID because identical content is
+     * interchangeable at the byte level.
+     *
      * @returns The reserved image ID.
      */
     allocateImageId(): Promise<number>;

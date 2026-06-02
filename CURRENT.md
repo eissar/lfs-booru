@@ -88,9 +88,9 @@ Routes:
 | `/gallery?q=...` | any | Parses search tokens; `#tag` tokens become repeated `tags` parameters, other tokens become `keyword` |
 | `/gallery` | any | Renders the gallery shell with page-size, sort, filter chips, upload form, and inspector shell |
 | `/fragment/items` | any | Lists images from the derived store and returns a photo-grid fragment |
-| `/fragment/inspect/:oid` | any | Looks up an image by OID and returns the inspector fragment |
+| `/fragment/inspect/:id` | any | Looks up an image by numeric ID and returns the inspector fragment |
 | `/ingest` | POST | Parses multipart upload, writes media and thumbnail files, appends and commits an add event, applies the event |
-| `/regen-thumbnail?oid=...` | any | Regenerates a thumbnail, appends and commits a `regen_thumbnail` event, applies the event |
+| `/regen-thumbnail?id=...` | any | Regenerates a thumbnail, appends and commits a `regen_thumbnail` event, applies the event |
 | `/image/:oid` | any | Serves a thumbnail file when present, otherwise resolves the image by OID and reads the local Git LFS object |
 | `/static/*` | any | Serves files from `./static` |
 | other paths | any | Returns 404 text |
@@ -202,9 +202,8 @@ GET /gallery
   -> render item cards and photo-grid fragment
   -> HTMX swaps grid content
 
-GET /fragment/inspect/{oid}
-  -> store.getIdByOid(oid)
-  -> store.listImagesByIds([id])
+GET /fragment/inspect/{id}
+  -> store.getImage(id)
   -> render inspector fragment
 
 GET /image/{oid}

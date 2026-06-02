@@ -27,6 +27,8 @@ Original media files are addressed by SHA-256 OID in add events and stored throu
 
 `index/next_image_id` is the write-path allocator. Add events persist allocated IDs. Replay reconciles the allocator upward from committed add-event IDs, so gaps are allowed and committed events remain the durable record of assigned IDs.
 
+Mature CAS systems separate content addressing from catalog identity: Git uses tree objects (blob hash + path), Spacedrive assigns per-file UUIDs alongside BLAKE3 content hashes, IPFS CIDs carry codec and structure metadata beyond the raw hash. Here the numeric ID serves as the catalog entry identity while the OID (SHA-256) is the content address. Routes that address a specific entry (inspector, metadata edit, thumbnail regen) use the ID; routes that serve raw bytes (image serving) use the OID because identical content is interchangeable at the byte level.
+
 ## Component Boundaries
 
 ### HTTP boundary
@@ -117,8 +119,8 @@ Import reuses the normal ingest and store application logic, but batches event-l
   -> JSON store loads/sorts/filters image state
   -> renderer creates item-card fragments and photo-grid fragment
 
-/fragment/inspect/{oid}
-  -> derived index maps OID to ID
+/fragment/inspect/{id}
+  -> derived index looks up image by ID
   -> renderer creates inspector fragment
 ```
 
@@ -140,8 +142,8 @@ The endpoint trusts the derived index for original OID lookup and trusts Git LFS
 ### Thumbnail regeneration
 
 ```text
-/regen-thumbnail?oid=...
-  -> map original OID to image state
+/regen-thumbnail?id=...
+  -> look up image state by ID
   -> read original media file
   -> generate new JPEG thumbnail
   -> append regen_thumbnail event with rollback around Git commit

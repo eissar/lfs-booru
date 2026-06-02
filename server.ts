@@ -58,14 +58,11 @@ export const itemSortParameterMap: Record<string, ItemSort> = {
 export async function reloadThumbnail(
     lib: LibConn,
     store: DerivedIndexStore,
-    oid: string,
+    id: string,
     fileExtension: string,
 ): Promise<{ oid: string; size: number; contentType: string }> {
     // Read the original media file bytes.
-    const id = await store.getIdByOid(oid);
-    if (!id) throw new Error(`Could not find image id for oid "${oid}"`);
-
-    const image = await store.getImage(String(id));
+    const image = await store.getImage(id);
     if (!image) throw new Error(`Could not find image state for id "${id}"`);
 
     const mediaPath = join(lib.path, image.path);
@@ -200,15 +197,11 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
     }
 
     if (url.pathname.startsWith('/fragment/inspect/')) {
-        const oid = url.pathname.split('/')[3];
-        const id = await store.getIdByOid(oid);
-        if (!id) return c.error(`Could not find id for "${oid}"`);
-        const list = store.listImagesByIds([id]);
-
-        // just return the first
-        for await (const [id, img] of list) {
-            return c.html(await render.renderInspector({ ...img, id }));
-        }
+        const id = url.pathname.split('/')[3];
+        if (!id) return c.error('Missing image id');
+        const img = await store.getImage(id);
+        if (!img) return c.error(`Could not find image "${id}"`);
+        return c.html(await render.renderInspector({ ...img, id }));
     }
 
     if (url.pathname === '/fragment/items') {
@@ -432,20 +425,17 @@ function createHandler(
 
         if (url.pathname === '/regen-thumbnail') {
             debug(url);
-            const oid = url.searchParams.get('oid') as string | null;
-            if (!oid) return c.error('missing form field: oid', 400);
+            const id = url.searchParams.get('id') as string | null;
+            if (!id) return c.error('missing parameter: id', 400);
 
-            const id = await store.getIdByOid(oid);
-            if (!id) return c.error(`Could not find image id for oid "${oid}"`, 404);
-
-            const image = await store.getImage(String(id));
-            if (!image) return c.error(`Could not find image state for id "${id}"`, 404);
+            const image = await store.getImage(id);
+            if (!image) return c.error(`Could not find image "${id}"`, 404);
 
             const fileExtension = image.path.split('.').pop() ?? 'jpg';
             const { oid: thumbnailOid, size: thumbnailSize, contentType } = await reloadThumbnail(
                 lib,
                 store,
-                oid,
+                id,
                 fileExtension,
             );
 
