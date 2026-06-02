@@ -1,0 +1,35 @@
+id: no-onclick-handler
+language: tsx
+files:
+  - "**/*.tsx"
+rule:
+  pattern:
+    context: "<_ onClick={$HANDLER} />"
+    selector: jsx_attribute
+message: >
+  Do not use onClick handlers in TSX files.
+  This project uses server-rendered HTML with HTMX and does not ship
+  client-side JavaScript for Preact hydration.
+  Use hx-on:click, hx-trigger, or a data-attribute with addEventListener instead.
+severity: error
+note: |
+  onClick requires client-side Preact hydration to function, but this project
+  renders HTML on the server and uses HTMX for interactivity.
+
+  Replace onClick with one of:
+    - hx-on:click="<inline expression>"
+    - hx-trigger="click" with hx-on or hx-get/hx-post
+    - A data-action attribute picked up by an existing addEventListener block
+
+  Example (HTMX inline event):
+    <button hx-on:click="document.getElementById('panel')?.classList.remove('open')">
+      Close
+    </button>
+
+  Example (addEventListener delegation):
+    <button data-action="close-panel">Close</button>
+    // in a script block:
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-action="close-panel"]');
+      if (btn) document.getElementById('panel')?.classList.remove('open');
+    });
