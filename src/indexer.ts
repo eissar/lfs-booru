@@ -100,12 +100,17 @@ export async function processEvents(
     store: DerivedIndexStore,
     eventLog: EventLog,
 ): Promise<IndexResult> {
-    const eventShards: string[] = [];
-
     if (!(eventLog instanceof NdjsonEventLog)) panic('Alternate EventLog not yet supported');
+
+    let eventFileCount = 0;
+    let lastShard: string | undefined;
 
     let eventCount = 0;
     for await (const { event, cursor } of eventLog.readEvents(store.getCursor())) {
+        if (cursor.eventFile !== lastShard) {
+            eventFileCount++;
+            lastShard = cursor.eventFile;
+        }
         await store.applyEvent(event, cursor);
         eventCount++;
     }
@@ -115,7 +120,7 @@ export async function processEvents(
     const result: IndexResult = {
         images: imageCount,
         tags: tagCount,
-        eventFiles: eventShards.length,
+        eventFiles: eventFileCount,
         events: eventCount,
     };
 
