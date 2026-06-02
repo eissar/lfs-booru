@@ -273,6 +273,7 @@ function createHandler(
     eventLog: EventLog,
     lib: LibConn,
     render: HtmlRenderer,
+    abortController: AbortController,
 ): (req: Request) => Promise<Response> {
     return async (req: Request): Promise<Response> => {
         const url = new URL(req.url);
@@ -280,6 +281,17 @@ function createHandler(
         console.log(
             `[request] method=${req.method} path=${url.pathname} query=${url.search}`,
         );
+
+        if (url.pathname === '/shutdown' && req.method === 'POST') {
+            // Schedule shutdown after the response is sent so the caller
+            // receives the acknowledgment before the process exits.
+            setTimeout(() => {
+                abortController.abort();
+                Deno.exit(0);
+            }, 0);
+
+            return c.text('shutting down');
+        }
 
         /**
          * @
@@ -597,9 +609,10 @@ async function Start() {
         console.log(`✅ Imported ${count} items from ${cfg.pack}`);
     }
 
-    const h = createHandler(store, eventLog, lib, render);
+    const abortController = new AbortController();
+    const h = createHandler(store, eventLog, lib, render, abortController);
 
-    Deno.serve({ port: cfg.port }, withLogging(h));
+    Deno.serve({ port: cfg.port, signal: abortController.signal }, withLogging(h));
 }
 
 if (import.meta.main) {
