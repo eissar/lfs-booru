@@ -25,7 +25,7 @@ function ingestForm(
 }
 
 Deno.test('POST /ingest returns 201 with valid image', async () => {
-    const form = ingestForm(MINIMAL_PNG);
+    const form = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
     const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
 
     if (res.status !== 201) {
@@ -39,7 +39,7 @@ Deno.test('POST /ingest returns 201 with valid image', async () => {
 });
 
 Deno.test('POST /ingest returns 201 with tags and name', async () => {
-    const form = ingestForm(MINIMAL_PNG, { tags: '["test"]', name: 'my photo' });
+    const form = ingestForm(MINIMAL_PNG, { tags: '["test", "delete-me"]', name: 'my photo' });
     const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
 
     if (res.status !== 201) {
@@ -109,7 +109,7 @@ Deno.test('POST /ingest returns 400 for malformed tags (not string array)', asyn
 });
 
 Deno.test('POST /ingest allows duplicate images', async () => {
-    const form1 = ingestForm(MINIMAL_PNG);
+    const form1 = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
     const res1 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form1 });
 
     if (res1.status !== 201) {
@@ -117,7 +117,7 @@ Deno.test('POST /ingest allows duplicate images', async () => {
     }
     await res1.text();
 
-    const form2 = ingestForm(MINIMAL_PNG);
+    const form2 = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
     const res2 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form2 });
 
     if (res2.status !== 201) {
