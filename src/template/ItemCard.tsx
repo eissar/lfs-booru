@@ -27,10 +27,14 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
     return (
         <article class='masonry-item group' data-image-id={image.id}>
             <div class='gallery-card relative overflow-hidden flex flex-col rounded-lg hover-card'>
-                <div class='gallery-card-meta block p-4 w-full peer order-2'>
-                    <a href={thumbSrc}>
-                        <span class='font-medium truncate'>{image.name}</span>
-                    </a>
+                <div
+                    class='gallery-card-meta block p-4 w-full peer order-2'
+                    hx-get={imageInspect}
+                    hx-target='#inspector-content'
+                    hx-swap='innerHTML'
+                    data-hx-on--click="document.getElementById('gallery-main')?.classList.add('inspector-open')"
+                >
+                    <span class='font-medium truncate'>{image.name}</span>
                     <div class='flex flex-wrap gap-2 text-xs mt-2'>
                         {image.tags.map((tag) => {
                             const tagUrl = tagHref(tag);
@@ -51,10 +55,6 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     width={image.width}
                     height={image.height}
                     style={`aspect-ratio: ${image.width}/${image.height}`}
-                    hx-get={imageInspect}
-                    hx-target='#inspector-content'
-                    hx-swap='innerHTML'
-                    data-hx-on--click="document.getElementById('gallery-main')?.classList.add('inspector-open')"
                     class='gallery-card-image transition-transform duration-300 peer-hover:scale-105 order-1'
                 />
             </div>
