@@ -27,10 +27,14 @@
         "mediaforge": "jsr:@globaltech/mediaforge@0.3.0",
         "simple-git": "npm:simple-git@3.36.0",
         "zip-js": "npm:@zip.js/zip.js@2.8.26",
+        "preact": "npm:preact@10.26.5",
+        "preact-render-to-string": "npm:preact-render-to-string@6.5.13",
         "@/": "./src/"
     },
     "compilerOptions": {
-        "strict": true
+        "strict": true,
+        "jsx": "react-jsx",
+        "jsxImportSource": "preact"
     }
 }
 

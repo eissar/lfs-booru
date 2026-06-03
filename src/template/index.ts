@@ -1,7 +1,7 @@
-import gallery from '@/template/gallery.ts';
-import itemCard from '@/template/item-card.ts';
-import photoGrid from '@/template/photo-grid_fragment.ts';
-import inspector from '@/template/inspector_fragment.ts';
+import gallery from '@/template/gallery.tsx';
+import itemCard from '@/template/item-card.tsx';
+import photoGrid from '@/template/photo-grid_fragment.tsx';
+import inspector from '@/template/inspector_fragment.tsx';
 
 export const template = {
     page: {
