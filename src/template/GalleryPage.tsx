@@ -78,7 +78,7 @@ function InspectorShell() {
                         <button
                             type='button'
                             class='rounded p-1 hover-surface'
-                            data-hx-on--click="document.getElementById('gallery-main')?.classList.remove('inspector-open')"
+                            data-hx-on--click='booruToggleInspector(false)'
                         >
                             <img
                                 src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
@@ -92,7 +92,7 @@ function InspectorShell() {
                 <div
                     id='inspector-content'
                     class='inspector-body min-h-0 flex-1 overflow-y-auto'
-                    data-hx-on--after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
+                    data-hx-on--after-swap='booruToggleInspector(true)'
                 >
                     <p class='text-xs text-muted'>Select an image to inspect it.</p>
                 </div>
@@ -297,7 +297,7 @@ export function GalleryPage({
                                         id='inspector-toggle'
                                         type='button'
                                         class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
-                                        data-hx-on--click="document.getElementById('gallery-main')?.classList.toggle('inspector-open')"
+                                        data-hx-on--click='booruToggleInspector()'
                                     >
                                         <img
                                             src='https://unpkg.com/heroicons@2.0.18/24/outline/information-circle.svg'

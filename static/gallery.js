@@ -102,6 +102,19 @@
     });
 })();
 
+globalThis.booruToggleInspector = function (forceOpen) {
+    var main = document.getElementById('gallery-main');
+    if (!main) return;
+    var state = main.classList.toggle('inspector-open', forceOpen);
+    localStorage.setItem('inspector-open', String(state));
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+    if (localStorage.getItem('inspector-open') === 'true') {
+        globalThis.booruToggleInspector('open');
+    }
+});
+
 document.addEventListener('click', function (event) {
     var details = document.querySelectorAll('details');
     details.forEach(function (detail) {

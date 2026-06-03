@@ -32,7 +32,7 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     hx-get={imageInspect}
                     hx-target='#inspector-content'
                     hx-swap='innerHTML'
-                    data-hx-on--click="document.getElementById('gallery-main')?.classList.add('inspector-open')"
+                    data-hx-on--click='booruToggleInspector(true)'
                 >
                     <span class='font-medium truncate'>{image.name}</span>
                     <div class='flex flex-wrap gap-2 text-xs mt-2'>
