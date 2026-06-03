@@ -160,36 +160,37 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
             if (match !== undefined) sort = match;
         }
-        const search: ItemsFilter = { limit, tags, sort };
+        const requestSearch: ItemsFilter = { limit, tags, sort };
 
-        let itemsList;
+        const search: ItemsFilter = { ...requestSearch };
+        if (offset) search.offset = offset;
+        // always list an extra
+        // so we can check if
+        // there are more items left
+        search.limit++;
 
-        // if we call /gallery with an offset
-        // overwrite here instead of setting search.limit
-        // handle update by ref or st
-        if (offset) itemsList = store.listItems({ ...search, limit: (limit + offset) });
-        else itemsList = store.listItems({ ...search, limit });
+        const itemsList = store.listItems(search);
 
         const cards = [];
+        let hasMore = false;
 
+        let listed = 0;
         for await (const [id, img] of itemsList) {
-            const image = { ...img, id: id };
-            if (img.oid) cards.push(ItemCard({ image: image }));
+            if (listed >= requestSearch.limit) {
+                hasMore = true;
+                break;
+            }
+
+            cards.push(ItemCard({ image: { ...img, id } }));
+            listed++;
         }
 
-        let hasMore = true;
-
-        // more accurately, store.listItems returns len items gt filter.limit
-        // but this is the easier, stateless way to do this without refactoring
-        // that function
-        if (limit > cards.length) hasMore = false;
-
-        if (offset) offset = offset + cards.length;
-        else offset = cards.length;
+        if (offset) offset = offset + listed;
+        else offset = listed;
 
         return c.html(
             await render.renderGalleryPage({
-                filter: search,
+                filter: requestSearch,
                 title: 'Gallery',
                 photoGridParam: { cards, offset: String(offset), hasMore },
             }),
