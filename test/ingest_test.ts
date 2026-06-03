@@ -7,6 +7,37 @@ const MINIMAL_PNG = Uint8Array.from(
 
 const UNSUPPORTED_BYTES = new TextEncoder().encode('this is not a supported media file');
 
+function testTag(name: string): string {
+    return `delete-me-${name}-${crypto.randomUUID()}`;
+}
+
+async function deleteItemsByTag(tag: string): Promise<void> {
+    const params = new URLSearchParams({ limit: '100', tags: tag });
+    const res = await fetch(`${BASE_URL}/fragment/items?${params.toString()}`);
+
+    if (res.status !== 200) {
+        throw new Error(
+            `Cleanup failed: expected 200 when listing tag "${tag}", got ${res.status}: ${await res.text()}`,
+        );
+    }
+
+    const body = await res.text();
+    const ids = [...body.matchAll(/data-image-id="(\d+)"/g)].map((match) => match[1]);
+
+    for (const id of ids) {
+        const form = new FormData();
+        form.set('id', id);
+
+        const deleteRes = await fetch(`${BASE_URL}/delete`, { method: 'POST', body: form });
+        const deleteBody = await deleteRes.text();
+        if (deleteRes.status !== 200) {
+            throw new Error(
+                `Cleanup failed: expected 200 when deleting item "${id}", got ${deleteRes.status}: ${deleteBody}`,
+            );
+        }
+    }
+}
+
 function ingestForm(
     image: Uint8Array | null,
     opts?: { tags?: string; name?: string; filename?: string },
@@ -25,30 +56,42 @@ function ingestForm(
 }
 
 Deno.test('POST /ingest returns 201 with valid image', async () => {
-    const form = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
-    const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
+    const tag = testTag('valid-image');
 
-    if (res.status !== 201) {
-        throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
-    }
+    try {
+        const form = ingestForm(MINIMAL_PNG, { tags: JSON.stringify([tag]) });
+        const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
 
-    const body = await res.text();
-    if (body !== 'ok') {
-        throw new Error(`Expected body "ok", got "${body}"`);
+        if (res.status !== 201) {
+            throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
+        }
+
+        const body = await res.text();
+        if (body !== 'ok') {
+            throw new Error(`Expected body "ok", got "${body}"`);
+        }
+    } finally {
+        await deleteItemsByTag(tag);
     }
 });
 
 Deno.test('POST /ingest returns 201 with tags and name', async () => {
-    const form = ingestForm(MINIMAL_PNG, { tags: '["test", "delete-me"]', name: 'my photo' });
-    const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
+    const tag = testTag('tags-and-name');
 
-    if (res.status !== 201) {
-        throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
-    }
+    try {
+        const form = ingestForm(MINIMAL_PNG, { tags: JSON.stringify(['test', tag]), name: 'my photo' });
+        const res = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form });
 
-    const body = await res.text();
-    if (body !== 'ok') {
-        throw new Error(`Expected body "ok", got "${body}"`);
+        if (res.status !== 201) {
+            throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
+        }
+
+        const body = await res.text();
+        if (body !== 'ok') {
+            throw new Error(`Expected body "ok", got "${body}"`);
+        }
+    } finally {
+        await deleteItemsByTag(tag);
     }
 });
 
@@ -109,23 +152,29 @@ Deno.test('POST /ingest returns 400 for malformed tags (not string array)', asyn
 });
 
 Deno.test('POST /ingest allows duplicate images', async () => {
-    const form1 = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
-    const res1 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form1 });
+    const tag = testTag('duplicate-images');
 
-    if (res1.status !== 201) {
-        throw new Error(`First upload: expected 201, got ${res1.status}: ${await res1.text()}`);
-    }
-    await res1.text();
+    try {
+        const form1 = ingestForm(MINIMAL_PNG, { tags: JSON.stringify([tag]) });
+        const res1 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form1 });
 
-    const form2 = ingestForm(MINIMAL_PNG, { tags: '["delete-me"]' });
-    const res2 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form2 });
+        if (res1.status !== 201) {
+            throw new Error(`First upload: expected 201, got ${res1.status}: ${await res1.text()}`);
+        }
+        await res1.text();
 
-    if (res2.status !== 201) {
-        throw new Error(`Second upload: expected 201, got ${res2.status}: ${await res2.text()}`);
-    }
+        const form2 = ingestForm(MINIMAL_PNG, { tags: JSON.stringify([tag]) });
+        const res2 = await fetch(`${BASE_URL}/ingest`, { method: 'POST', body: form2 });
 
-    const body = await res2.text();
-    if (body !== 'ok') {
-        throw new Error(`Expected body "ok", got "${body}"`);
+        if (res2.status !== 201) {
+            throw new Error(`Second upload: expected 201, got ${res2.status}: ${await res2.text()}`);
+        }
+
+        const body = await res2.text();
+        if (body !== 'ok') {
+            throw new Error(`Expected body "ok", got "${body}"`);
+        }
+    } finally {
+        await deleteItemsByTag(tag);
     }
 });
