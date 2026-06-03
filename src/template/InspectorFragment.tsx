@@ -54,6 +54,19 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                         alt='Refresh'
                     />
                 </button>
+                <a
+                    id='inspector-header-download'
+                    href={`/image/${image.oid}`}
+                    download={image.name}
+                    class='rounded p-1 hover-surface'
+                >
+                    <img
+                        src='https://unpkg.com/heroicons@2.0.18/24/outline/arrow-down-tray.svg'
+                        class='h-4 w-4'
+                        style='filter: var(--icon-filter);'
+                        alt='Download'
+                    />
+                </a>
             </div>
             <form
                 hx-post='/update-metadata'
