@@ -1,0 +1,20 @@
+id: no-hx-on-double-dash
+language: tsx
+files:
+  - "**/*.tsx"
+rule:
+  kind: jsx_attribute
+  regex: "hx-on--"
+message: >
+  Use hx-on-$EVENT (single dash), not hx-on--$EVENT (double dash).
+  HTMX uses a single dash to delimit the event name in the hx-on- attribute.
+severity: error
+note: |
+  The hx-on-- prefix is not recognized by HTMX. The correct form is
+  hx-on-{event} with a single dash before the event name.
+
+  Incorrect:
+    <button hx-on--click="doSomething()">...</button>
+
+  Correct:
+    <button hx-on-click="doSomething()">...</button>
