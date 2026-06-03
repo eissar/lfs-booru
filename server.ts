@@ -5,7 +5,7 @@ import { typeByExtension } from '@std/media-types';
 import { GitConstructError, GitError, simpleGit, TaskConfigurationError } from 'simple-git';
 
 import { getFlags } from '@/cli.ts';
-import type { EventLog } from '@/event_log.ts';
+import type { EventLog, EventLogReader } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
@@ -264,7 +264,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
 
 function createHandler(
     store: DerivedIndexStore,
-    eventLog: EventLog,
+    eventLog: EventLog & EventLogReader,
     lib: LibConn,
     render: HtmlRenderer,
     abortController: AbortController,
@@ -604,7 +604,7 @@ async function Start() {
     }
 
     const store: DerivedIndexStore = new JsonFileIndexStore(lib);
-    const eventLog: EventLog = new NdjsonEventLog(lib.path);
+    const eventLog: EventLog & EventLogReader = new NdjsonEventLog(lib.path);
     const render: HtmlRenderer = new CachingHtmlRenderer(lib.path);
 
     const needsInitialize = cfg.rebuildIndex || !(await store.isInitialized());

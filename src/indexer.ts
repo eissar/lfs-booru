@@ -1,6 +1,5 @@
 import type { DerivedIndexStore } from './index_store.ts';
-import { EventLog, NdjsonEventLog } from './event_log.ts';
-import { panic } from './util.ts';
+import type { EventLogReader } from './event_log.ts';
 
 // TODO: consider
 //
@@ -99,10 +98,8 @@ export type IndexResult = {
  */
 export async function processEvents(
     store: DerivedIndexStore,
-    eventLog: EventLog,
+    eventLog: EventLogReader,
 ): Promise<IndexResult> {
-    if (!(eventLog instanceof NdjsonEventLog)) panic('Alternate EventLog not yet supported');
-
     let eventFileCount = 0;
     let lastShard: string | undefined;
 
