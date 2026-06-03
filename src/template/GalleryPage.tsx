@@ -1,7 +1,6 @@
 import type { ItemsFilter } from '@/index_store.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 import PhotoGrid from './PhotoGridFragment.tsx';
-import { ComponentChildren } from 'preact';
 import { HtmlRenderer } from '../renderer.tsx';
 
 function HiddenInput({ name, value }: { name: string; value: string }) {
@@ -221,6 +220,7 @@ export function GalleryPage({
                                     </button>
                                 </form>
                                 <div class='relative inline-block'>
+                                    {/* @ts-expect-error name attr supported on <details> but missing from React types */}
                                     <details class='relative' name='header'>
                                         <summary
                                             id='settings-button'
@@ -276,6 +276,7 @@ export function GalleryPage({
                                 </div>
                                 <div class='relative inline-block'>
                                     <button
+                                        type='button'
                                         id='dark-mode-toggle'
                                         class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
                                     >
@@ -307,6 +308,7 @@ export function GalleryPage({
                                     </button>
                                 </div>
                                 <div class='relative inline-block'>
+                                    {/* @ts-expect-error name attr supported on <details> but missing from React types */}
                                     <details class='relative' name='header'>
                                         <summary
                                             id='upload-button'
