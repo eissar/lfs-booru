@@ -78,7 +78,7 @@ function InspectorShell() {
                         <button
                             type='button'
                             class='rounded p-1 hover-surface'
-                            data-hx-on--click='booruToggleInspector(false)'
+                            data-hx-on-click='booruToggleInspector(false)'
                         >
                             <img
                                 src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
@@ -92,7 +92,7 @@ function InspectorShell() {
                 <div
                     id='inspector-content'
                     class='inspector-body min-h-0 flex-1 overflow-y-auto'
-                    data-hx-on--after-swap='booruToggleInspector(true)'
+                    data-hx-on--after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
                 >
                     <p class='text-xs text-muted'>Select an image to inspect it.</p>
                 </div>
@@ -297,7 +297,7 @@ export function GalleryPage({
                                         id='inspector-toggle'
                                         type='button'
                                         class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
-                                        data-hx-on--click='booruToggleInspector()'
+                                        data-hx-on-click='booruToggleInspector()'
                                     >
                                         <img
                                             src='https://unpkg.com/heroicons@2.0.18/24/outline/information-circle.svg'
@@ -380,6 +380,26 @@ export function GalleryPage({
                     </div>
                     <InspectorShell />
                 </main>
+                <div id='toasts-log' class='fixed bottom-4 right-4 z-50 flex flex-col gap-2'>
+                    <div
+                        class='toast flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg'
+                        style='background-color: var(--bg-surface); border: 1px solid var(--border-color);'
+                    >
+                        <span class='text-sm'>Toast message</span>
+                        <button
+                            type='button'
+                            class='ml-auto rounded p-1 hover-surface'
+                            hx-on-click="this.closest('.toast').remove()"
+                        >
+                            <img
+                                src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
+                                class='h-4 w-4'
+                                style='filter: var(--icon-filter);'
+                                alt='Dismiss'
+                            />
+                        </button>
+                    </div>
+                </div>
             </body>
         </html>
     );
