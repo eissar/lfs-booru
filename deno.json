@@ -1,7 +1,8 @@
 {
     "tasks": {
-        "run": "deno run --allow-all ./server.ts",
+        "run": "deno run -A ./server.ts",
         "run:clean": "deno task run -A --clear-artifacts",
+        "test": "deno test -A --no-check && sg scan",
         "lint-artifacts": "deno run --allow-all scripts/render_lint_artifacts.ts && deno run --no-lock -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
     },
     "fmt": {
@@ -38,4 +39,3 @@
         "jsxImportSource": "preact"
     }
 }
-
