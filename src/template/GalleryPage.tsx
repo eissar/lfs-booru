@@ -49,7 +49,7 @@ function FilterBar({ f }: { f: ItemsFilter }) {
                     hx-target='#photo-grid'
                     hx-swap='outerHTML'
                     hx-push-url={removeUrl}
-                    data-hx-on--after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
+                    data-hx-on-after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
                 >
                     #{displayText}×
                 </a>
@@ -92,7 +92,7 @@ function InspectorShell() {
                 <div
                     id='inspector-content'
                     class='inspector-body min-h-0 flex-1 overflow-y-auto'
-                    data-hx-on--after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
+                    data-hx-on-after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
                 >
                     <p class='text-xs text-muted'>Select an image to inspect it.</p>
                 </div>
@@ -331,9 +331,9 @@ export function GalleryPage({
                                                 hx-post='/ingest'
                                                 hx-encoding='multipart/form-data'
                                                 hx-target='#upload-result'
-                                                data-hx-on--dragover="event.preventDefault(); this.classList.add('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
-                                                data-hx-on--dragleave="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
-                                                data-hx-on--drop="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500'); if(event.dataTransfer.files.length > 0) document.getElementById('file-input').files = event.dataTransfer.files;"
+                                                data-hx-on-dragover="event.preventDefault(); this.classList.add('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
+                                                data-hx-on-dragleave="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
+                                                data-hx-on-drop="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500'); if(event.dataTransfer.files.length > 0) document.getElementById('file-input').files = event.dataTransfer.files;"
                                                 class='p-4 rounded-md transition-all duration-200'
                                             >
                                                 <input
@@ -354,7 +354,7 @@ export function GalleryPage({
                                             <div
                                                 id='upload-result'
                                                 class='p-4 pt-0'
-                                                data-hx-on--before-swap='if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false; }'
+                                                data-hx-on-before-swap='if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false; }'
                                             />
                                         </div>
                                     </details>
@@ -364,6 +364,9 @@ export function GalleryPage({
                     </div>
                 </header>
                 <main id='gallery-main' class='gallery-main main-scroll'>
+                    <script>
+                        {`try{if(localStorage.getItem('inspector-open')==='true')document.getElementById('gallery-main')?.classList.add('inspector-open')}catch(_){}`}
+                    </script>
                     <div class='gallery-content'>
                         <div id='filter-bar'>
                             <FilterBar f={search} />
