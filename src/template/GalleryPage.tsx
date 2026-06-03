@@ -1,4 +1,3 @@
-import { MASONRY_LAYOUT_SCRIPT } from '@/template/masonryScript.ts';
 import type { ItemsFilter } from '@/index_store.ts';
 import { itemFilterToSearchParams, itemSortParameterMap } from '../../server.ts';
 import PhotoGrid from './PhotoGridFragment.tsx';
@@ -160,64 +159,7 @@ export function GalleryPage({
                     rel='stylesheet'
                 />
                 <link href='/static/gallery.css' rel='stylesheet' />
-                <script
-                    // deno-lint-ignore react-no-danger
-                    dangerouslySetInnerHTML={{
-                        __html: `${MASONRY_LAYOUT_SCRIPT}
-
-(function () {
-    const savedTheme = localStorage.getItem('theme');
-    const isDarkMode = savedTheme ? savedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-    document.addEventListener('DOMContentLoaded', function () {
-        const toggle = document.getElementById('dark-mode-toggle');
-        if (toggle) {
-            toggle.addEventListener('click', function () {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('theme', newTheme);
-            });
-        }
-    });
-})();
-
-document.addEventListener('click', function (event) {
-    const details = document.querySelectorAll('details');
-    details.forEach(detail => {
-        if (!detail.contains(event.target)) {
-            detail.open = false;
-        }
-    });
-});
-
-document.addEventListener('DOMContentLoaded', function () {
-    const viewInputs = document.querySelectorAll('input[name="gallery-view"]');
-    const views = new Set(['masonry', 'grid', 'list']);
-    const requestedView = new URLSearchParams(window.location.search).get('view');
-    if (requestedView && views.has(requestedView)) {
-        const selected = document.getElementById('gallery-view-' + requestedView);
-        if (selected instanceof HTMLInputElement) selected.checked = true;
-    }
-
-    viewInputs.forEach(function (input) {
-        input.addEventListener('change', function () {
-            if (!(input instanceof HTMLInputElement) || !input.checked) return;
-            const nextUrl = new URL(window.location.href);
-            nextUrl.searchParams.set('view', input.value);
-            window.history.replaceState(null, '', nextUrl);
-            if (input.value === 'masonry') {
-                globalThis.booruLayoutMasonry?.();
-            } else {
-                globalThis.booruClearMasonry?.();
-            }
-        });
-    });
-
-    globalThis.booruLayoutMasonry?.();
-});`,
-                    }}
-                />
+                <script src='/static/gallery.js'></script>
             </head>
             <body data-renderer-version={version} class='antialiased'>
                 <header

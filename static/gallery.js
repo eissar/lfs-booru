@@ -1,7 +1,4 @@
-function javascript(strings: TemplateStringsArray): string {
-    return strings.join('');
-}
-export const MASONRY_LAYOUT_SCRIPT = javascript`(function () {
+(function () {
     var galleryColHeights = [];
 
     function clearMasonryLayout() {
@@ -86,4 +83,56 @@ export const MASONRY_LAYOUT_SCRIPT = javascript`(function () {
     });
 
     document.addEventListener('htmx:afterSettle', layoutMasonry);
-})();`;
+})();
+
+(function () {
+    var savedTheme = localStorage.getItem('theme');
+    var isDarkMode = savedTheme ? savedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+    document.addEventListener('DOMContentLoaded', function () {
+        var toggle = document.getElementById('dark-mode-toggle');
+        if (toggle) {
+            toggle.addEventListener('click', function () {
+                var currentTheme = document.documentElement.getAttribute('data-theme');
+                var newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        }
+    });
+})();
+
+document.addEventListener('click', function (event) {
+    var details = document.querySelectorAll('details');
+    details.forEach(function (detail) {
+        if (!detail.contains(event.target)) {
+            detail.open = false;
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var viewInputs = document.querySelectorAll('input[name="gallery-view"]');
+    var views = new Set(['masonry', 'grid', 'list']);
+    var requestedView = new URLSearchParams(window.location.search).get('view');
+    if (requestedView && views.has(requestedView)) {
+        var selected = document.getElementById('gallery-view-' + requestedView);
+        if (selected instanceof HTMLInputElement) selected.checked = true;
+    }
+
+    viewInputs.forEach(function (input) {
+        input.addEventListener('change', function () {
+            if (!(input instanceof HTMLInputElement) || !input.checked) return;
+            var nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set('view', input.value);
+            window.history.replaceState(null, '', nextUrl);
+            if (input.value === 'masonry') {
+                globalThis.booruLayoutMasonry?.();
+            } else {
+                globalThis.booruClearMasonry?.();
+            }
+        });
+    });
+
+    globalThis.booruLayoutMasonry?.();
+});
