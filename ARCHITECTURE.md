@@ -2,12 +2,12 @@
 
 ## System Overview
 
-The booru prototype is a Git-backed media gallery with an event-sourced metadata model.
+The repository implements a Git-backed media gallery with an event-sourced metadata model.
 
 - Library repositories hold committed metadata event shards and Git LFS-tracked media paths.
 - Git LFS stores original media files and generated JPEG thumbnails as large objects.
 - JSON files under `index/` materialize the gallery read model.
-- The HTTP server performs startup initialization/replay, synchronous ingest, gallery rendering, thumbnail regeneration, and image serving.
+- The HTTP server performs startup initialization and replay, synchronous ingest, gallery rendering, thumbnail regeneration, and image serving.
 
 The implementation keeps the source model simple: committed NDJSON events describe metadata state, while media and thumbnail bytes live behind LFS-tracked paths. Derived JSON and HTML artifacts are disposable and rebuildable from committed source files and events.
 
@@ -15,7 +15,7 @@ The implementation keeps the source model simple: committed NDJSON events descri
 
 ### Metadata
 
-`events/*.ndjson` is the authoritative metadata stream. Events include add, tag add, tag remove, delete, and thumbnail-regeneration operations. Replaying events produces image state and tag indexes.
+`events/*.ndjson` is the authoritative metadata stream. Events include add, tag add, tag remove, delete, thumbnail-regeneration, and metadata-update operations. Replaying events produces image state and tag indexes.
 
 `event_cursor` is replay bookkeeping. It records how far the derived index has processed the event log, but it is not authoritative metadata.
 
@@ -27,7 +27,7 @@ Original media files are addressed by SHA-256 OID in add events and stored throu
 
 `index/next_image_id` is the write-path allocator. Add events persist allocated IDs. Replay reconciles the allocator upward from committed add-event IDs, so gaps are allowed and committed events remain the durable record of assigned IDs.
 
-Mature CAS systems separate content addressing from catalog identity: Git uses tree objects (blob hash + path), Spacedrive assigns per-file UUIDs alongside BLAKE3 content hashes, IPFS CIDs carry codec and structure metadata beyond the raw hash. Here the numeric ID serves as the catalog entry identity while the OID (SHA-256) is the content address. Routes that address a specific entry (inspector, metadata edit, thumbnail regen) use the ID; routes that serve raw bytes (image serving) use the OID because identical content is interchangeable at the byte level.
+The numeric ID serves as the catalog entry identity while the OID (SHA-256) is the content address. Routes that address a specific entry, such as the inspector and thumbnail regeneration, use the ID; routes that serve raw bytes use the OID because identical content is interchangeable at the byte level.
 
 ## Component Boundaries
 
@@ -39,7 +39,7 @@ The HTTP boundary returns `Response` objects directly. There is no framework rou
 
 ### Ingest boundary
 
-`ingest()` prepares an add event and the files it references. It reads bytes, hashes content, allocates an ID, detects media type, writes the original file, generates and writes a thumbnail, and returns an event. It does not append the event or commit Git state.
+`ingest()` prepares an add event and the files it references. It reads bytes, hashes content, allocates an ID, detects media type, writes the original file, generates and writes a thumbnail, and returns an event together with the bytes to persist. It does not append the event or commit Git state.
 
 The server handler owns the transactional sequence around that prepared event: append to the event log with rollback protection, commit source paths with Git, then apply the event to the derived index.
 
@@ -61,7 +61,7 @@ Replay and post-ingest application use the same `applyEvent` reducer path. Batch
 
 ### Thumbnail boundary
 
-`thumbnail.ts` isolates FFmpeg/mediaforge use. Callers provide bytes and a detected extension; the module returns a JPEG blob, OID, and size. The caller chooses where to persist the thumbnail and how to record the thumbnail OID.
+`thumbnail.ts` isolates FFmpeg and mediaforge use. Callers provide bytes and a detected extension; the module returns a JPEG blob, OID, and size. The caller chooses where to persist the thumbnail and how to record the thumbnail OID.
 
 ### Import boundary
 
@@ -76,7 +76,7 @@ parse flags and .env
   -> initialize or reuse library Git repository
   -> optionally remove renderer artifacts
   -> create JSON store, NDJSON event log, and renderer
-  -> initialize/rebuild derived index when requested or incomplete
+  -> initialize or rebuild derived index when requested or incomplete
   -> optionally import Eagle source through a batched event append
   -> serve HTTP
 ```
@@ -176,20 +176,20 @@ The library `.gitignore` keeps derived files out of commits while allowing place
 
 ## Invariants and Assumptions
 
-- Event replay order is lexicographic shard name order followed by line order.
-- Event cursors are byte offsets into shard files immediately after processed lines.
-- Event files are NDJSON with one serialized event per line.
-- Add events contain enough image metadata to rebuild `image_state.json`.
-- Tag indexes are derived from image state and tag events.
-- Thumbnail-regeneration events update only `thumbnailOid` in image state.
-- Original OIDs are SHA-256 hashes of original upload/import bytes.
-- Thumbnail OIDs are SHA-256 hashes of generated JPEG bytes.
-- Image IDs are numeric in events and strings in JSON index keys.
-- ID allocation is monotonic and non-contiguous.
-- `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be considered initialized.
-- `listItems` uses full-file loading, in-memory sorting, and OR tag matching.
-- Renderer gallery-page cache identity includes renderer version and input filter.
-- Process-local mutexes serialize operations only inside one process and one store/event-log instance.
+- Event replay order is lexicographic shard name order followed by line order
+- Event cursors are byte offsets into shard files immediately after processed lines
+- Event files are NDJSON with one serialized event per line
+- Add events contain enough image metadata to rebuild `image_state.json`
+- Tag indexes are derived from image state and tag events
+- Thumbnail-regeneration events update only `thumbnailOid` in image state
+- Original OIDs are SHA-256 hashes of original upload/import bytes
+- Thumbnail OIDs are SHA-256 hashes of generated JPEG bytes
+- Image IDs are numeric in events and strings in JSON index keys
+- ID allocation is monotonic and non-contiguous
+- `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be considered initialized
+- `listItems` uses full-file loading, in-memory sorting, and OR tag matching
+- Renderer gallery-page cache identity includes renderer version and input filter
+- Process-local mutexes serialize operations only inside one process and one store/event-log instance
 
 ## Failure Boundaries
 
