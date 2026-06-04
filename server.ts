@@ -211,9 +211,21 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
 
     if (url.pathname.startsWith('/fragment/inspect/')) {
         const id = url.pathname.split('/')[3];
-        if (!id) return c.error('Missing image id');
+        if (!id) {
+            return c.html(
+                `<div class="booru-toast booru-toast-error" role="alert"><span>Missing image id</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
+                400,
+                { 'HX-Reswap': 'beforeend' },
+            );
+        }
         const img = await store.getImage(id);
-        if (!img) return c.error(`Could not find image "${id}"`);
+        if (!img) {
+            return c.html(
+                `<div class="booru-toast booru-toast-error" role="alert"><span>Could not find image</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
+                404,
+                { 'HX-Reswap': 'beforeend' },
+            );
+        }
         return c.html(await render.renderInspector({ ...img, id }));
     }
 
@@ -224,7 +236,13 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         let offset: number | false = false;
         if (url.searchParams.has('offset')) {
             offset = Number(url.searchParams.get('offset'));
-            if (!isInt(offset) || offset < 0) return c.error('invalid offset');
+            if (!isInt(offset) || offset < 0) {
+                return c.html(
+                    `<div class="booru-toast booru-toast-error" role="alert"><span>Invalid offset</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
+                    400,
+                    { 'HX-Reswap': 'beforeend' },
+                );
+            }
         }
 
         const tags = url.searchParams.getAll('tags')

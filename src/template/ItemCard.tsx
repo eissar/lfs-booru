@@ -31,6 +31,7 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     class='gallery-card-meta block p-4 w-full peer order-2'
                     hx-get={imageInspect}
                     hx-target='#inspector-content'
+                    hx-target-error='#toasts-log'
                     hx-swap='innerHTML'
                     data-hx-on-click='booruToggleInspector(true)'
                 >

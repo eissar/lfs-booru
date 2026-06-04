@@ -9,6 +9,7 @@ function LoadMoreButton({ offset, hasMore }: { offset: string; hasMore: boolean 
                     type='button'
                     hx-get='/fragment/items'
                     hx-target='#pagination-controls'
+                    hx-target-error='#toasts-log'
                     hx-swap='outerHTML'
                     hx-select='#photo-grid > *'
                     hx-include='#filter-bar,#preferences,#pagination-controls'

@@ -47,12 +47,12 @@ export const c = {
             },
         ),
 
-    html: (html: string, status: number = Status.OK): Response =>
+    html: (html: string, status: number = Status.OK, headers: HeadersInit = {}): Response =>
         new Response(
             html,
             {
                 status,
-                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                headers: { 'Content-Type': 'text/html; charset=utf-8', ...headers },
             },
         ),
 

@@ -126,6 +126,8 @@ Import reuses the normal ingest and store application logic, but batches event-l
 
 The gallery read path depends on derived JSON freshness. It does not replay during ordinary reads.
 
+`/fragment` URLs always respond with valid HTML because HTMX swaps their responses into the current page. Fragment error responses render toast HTML and use HTMX error retargeting to append the toast to `#toasts-log` instead of replacing the successful fragment target.
+
 ### Image reads
 
 ```text

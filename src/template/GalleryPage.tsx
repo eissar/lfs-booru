@@ -50,6 +50,7 @@ function FilterBar({ f }: { f: ItemsFilter }) {
                     href={removeUrl}
                     hx-get={fragmentUrl}
                     hx-target='#photo-grid'
+                    hx-target-error='#toasts-log'
                     hx-swap='outerHTML'
                     hx-push-url={removeUrl}
                     data-hx-on-after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
@@ -153,6 +154,7 @@ export function GalleryPage({
                 <meta name='viewport' content='width=device-width, initial-scale=1' />
                 <title>{title}</title>
                 <script src='https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js'></script>
+                <script src='https://cdn.jsdelivr.net/npm/htmx-ext-response-targets@2.0.4'></script>
                 <script src='https://cdn.tailwindcss.com'></script>
                 <link rel='preconnect' href='https://fonts.googleapis.com' />
                 <link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
@@ -163,7 +165,7 @@ export function GalleryPage({
                 <link href='/static/gallery.css' rel='stylesheet' />
                 <script src='/static/gallery.js'></script>
             </head>
-            <body data-renderer-version={version} class='antialiased'>
+            <body data-renderer-version={version} class='antialiased' hx-ext='response-targets'>
                 <header
                     id='toolbar'
                     class='sticky top-0 z-20 backdrop-blur-lg shadow-sm'
@@ -386,26 +388,7 @@ export function GalleryPage({
                     </div>
                     <InspectorShell />
                 </main>
-                <div id='toasts-log' class='fixed bottom-4 right-4 z-50 flex flex-col gap-2'>
-                    <div
-                        class='toast flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg'
-                        style='background-color: var(--bg-surface); border: 1px solid var(--border-color);'
-                    >
-                        <span class='text-sm'>Toast message</span>
-                        <button
-                            type='button'
-                            class='ml-auto rounded p-1 hover-surface'
-                            hx-on-click="this.closest('.toast').remove()"
-                        >
-                            <img
-                                src='https://unpkg.com/heroicons@2.0.18/24/outline/x-mark.svg'
-                                class='h-4 w-4'
-                                style='filter: var(--icon-filter);'
-                                alt='Dismiss'
-                            />
-                        </button>
-                    </div>
-                </div>
+                <div id='toasts-log' />
             </body>
         </html>
     );
