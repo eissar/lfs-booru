@@ -67,6 +67,20 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                         alt='Download'
                     />
                 </a>
+                <a
+                    id='inspector-header-open-tab'
+                    href={`/image/${image.oid}`}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    class='rounded p-1 hover-surface'
+                >
+                    <img
+                        src='https://unpkg.com/heroicons@2.0.18/24/outline/arrow-top-right-on-square.svg'
+                        class='h-4 w-4'
+                        style='filter: var(--icon-filter);'
+                        alt='Open in new tab'
+                    />
+                </a>
             </div>
             <form
                 hx-post='/update-metadata'
