@@ -13,7 +13,7 @@ function LoadMoreButton({ offset, hasMore }: { offset: string; hasMore: boolean 
                     hx-swap='outerHTML'
                     hx-select='#photo-grid > *'
                     hx-include='#filter-bar,#preferences,#pagination-controls'
-                    class='mt-6 w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                    class='mt-6 w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus-ring'
                 >
                     Load more <span class='text-sm opacity-80'>(showing {offset})</span>
                 </button>

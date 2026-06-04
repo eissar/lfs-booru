@@ -219,7 +219,7 @@ export function GalleryPage({
                                     {hiddenTagInputs}
                                     <button
                                         type='submit'
-                                        class='h-full px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                                        class='h-full px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus-ring'
                                     >
                                         Search
                                     </button>
@@ -229,7 +229,7 @@ export function GalleryPage({
                                     <details class='relative' name='header'>
                                         <summary
                                             id='settings-button'
-                                            class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer list-none hover-surface'
+                                            class='p-2 rounded cursor-pointer list-none hover-surface focus-ring'
                                         >
                                             <img
                                                 src='https://unpkg.com/heroicons@2.0.13/24/outline/cog.svg'
@@ -255,7 +255,7 @@ export function GalleryPage({
                                                 <select
                                                     id='page-size-input'
                                                     name='limit'
-                                                    class='block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                                                    class='block w-full border border-transparent rounded-lg py-2 px-3 input-field focus-ring'
                                                 >
                                                     <PageSizeOptions limit={search.limit} />
                                                 </select>
@@ -265,13 +265,13 @@ export function GalleryPage({
                                                 <select
                                                     id='sort-input'
                                                     name='sort'
-                                                    class='block w-full border border-transparent rounded-lg py-2 px-3 input-field focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                                                    class='block w-full border border-transparent rounded-lg py-2 px-3 input-field focus-ring'
                                                 >
                                                     <SortOptions sort={search.sort} />
                                                 </select>
                                                 <button
                                                     type='submit'
-                                                    class='w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                                                    class='w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus-ring'
                                                 >
                                                     Apply
                                                 </button>
@@ -283,7 +283,7 @@ export function GalleryPage({
                                     <button
                                         type='button'
                                         id='dark-mode-toggle'
-                                        class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
+                                        class='p-2 rounded cursor-pointer hover-surface focus-ring'
                                     >
                                         <img
                                             class='h-5 w-5 sun-icon'
@@ -301,7 +301,7 @@ export function GalleryPage({
                                     <button
                                         id='inspector-toggle'
                                         type='button'
-                                        class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover-surface'
+                                        class='p-2 rounded cursor-pointer hover-surface focus-ring'
                                         data-hx-on-click='booruToggleInspector()'
                                     >
                                         <img
@@ -318,7 +318,7 @@ export function GalleryPage({
                                         <summary
                                             id='upload-button'
                                             aria-haspopup='true'
-                                            class='p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer list-none hover-surface'
+                                            class='p-2 rounded cursor-pointer list-none hover-surface focus-ring'
                                         >
                                             <img
                                                 src='https://unpkg.com/heroicons@2.0.13/24/outline/arrow-up-tray.svg'
@@ -351,7 +351,7 @@ export function GalleryPage({
                                                 <button
                                                     type='submit'
                                                     id='submit-button'
-                                                    class='w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+                                                    class='w-full py-2 px-4 rounded-md bg-indigo-600 text-white font-medium hover:bg-indigo-700 focus-ring'
                                                 >
                                                     Upload
                                                 </button>
