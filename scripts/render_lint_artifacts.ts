@@ -57,6 +57,7 @@ const galleryPage = `<!DOCTYPE html>\n${renderToString(
         title: 'Lint gallery',
         version: 'lint-artifact',
         search: { limit: 25, offset: 0, tags: ['landscape', 'blue sky'] },
+        params: { cards: [], offset: '0', hasMore: false },
     }),
 )}`;
 const populatedGalleryPage = replaceInitialPhotoGrid(galleryPage, populatedPhotoGrid);
