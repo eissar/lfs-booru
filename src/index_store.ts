@@ -12,11 +12,14 @@ export type ItemSort = {
     direction: ItemSortDirection;
 };
 
+export type DeletedFilter = 'yes' | 'no' | 'both';
+
 export type ItemsFilter = {
     limit: number;
     tags?: string[];
     offset?: number;
     sort?: ItemSort;
+    deleted?: DeletedFilter;
 };
 
 // TODO:
@@ -435,8 +438,13 @@ export class JsonFileIndexStore implements DerivedIndexStore {
             return 0;
         });
 
+        const deletedMode = options.deleted ?? 'no';
+
         for (const [id, imageState] of sortedEntries) {
-            if (imageState.isDeleted) continue;
+            if (
+                (deletedMode === 'no' && imageState.isDeleted) ||
+                (deletedMode === 'yes' && !imageState.isDeleted)
+            ) continue;
 
             if (options.tags && options.tags.length > 0) {
                 const matches = options.tags.some((t) => imageState.tags.includes(t));

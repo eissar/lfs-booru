@@ -14,6 +14,9 @@ function renderFilterChipDisplayText(k: string, v: string): string | false {
     if (k === 'sort') {
         return `${k}: ${v}`;
     }
+    if (k === 'deleted') {
+        return `${k}: ${v}`;
+    }
     return false;
 }
 

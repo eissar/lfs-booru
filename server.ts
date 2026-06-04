@@ -8,7 +8,7 @@ import { getFlags } from '@/cli.ts';
 import type { EventLog, EventLogReader } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
-import { DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
+import { DeletedFilter, DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
 import { type DeleteEvent, processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { detectMediaFileExtension } from '@/ingest.ts';
@@ -127,6 +127,10 @@ export function itemFilterToSearchParams(
         params.set('sort', sortParameter);
     }
 
+    if (filter.deleted !== undefined && filter.deleted !== 'no') {
+        params.set('deleted', filter.deleted);
+    }
+
     return params;
 }
 
@@ -160,7 +164,15 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
             if (match !== undefined) sort = match;
         }
+
+        let deleted: DeletedFilter = 'no';
+        if (url.searchParams.has('deleted')) {
+            const raw = url.searchParams.get('deleted') ?? '';
+            if (raw === 'yes' || raw === 'both') deleted = raw;
+        }
+
         const requestSearch: ItemsFilter = { limit, tags, sort };
+        if (deleted !== 'no') requestSearch.deleted = deleted;
 
         const search: ItemsFilter = { ...requestSearch };
         if (offset) search.offset = offset;
@@ -227,12 +239,19 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             if (match !== undefined) sort = match;
         }
 
+        let deleted: DeletedFilter = 'no';
+        if (url.searchParams.has('deleted')) {
+            const raw = url.searchParams.get('deleted') ?? '';
+            if (raw === 'yes' || raw === 'both') deleted = raw;
+        }
+
         const opts: ItemsFilter = {
             limit,
             tags,
             sort,
         };
         if (offset) opts.offset = offset;
+        if (deleted !== 'no') opts.deleted = deleted;
 
         const itemsList = store.listItems(opts);
 
