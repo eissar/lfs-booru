@@ -703,3 +703,51 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
 .main-scroll {
     overflow: hidden;
 }
+
+/* Image loading placeholder — prevents flash of empty content when
+   htmx outerHTML swaps in a fresh <img> whose URL hasn't loaded yet.
+   The background colour shows through while the browser fetches the image. */
+.gallery-card-image {
+    background-color: var(--bg-surface-hover);
+}
+
+/* Refresh button → show a spinning indicator during the htmx request.
+   The img stays in the layout via visibility: hidden so the button never
+   resizes; the spinner is absolutely positioned over it. */
+#inspector-header-refresh,
+#inspector-header-download,
+#inspector-header-open-tab {
+    position: relative;
+}
+
+#inspector-header-refresh:focus-visible,
+#inspector-header-download:focus-visible,
+#inspector-header-open-tab:focus-visible {
+    z-index: 1;
+    outline: 2px solid var(--accent-indigo);
+    outline-offset: 2px;
+}
+
+#inspector-header-refresh.htmx-request img {
+    visibility: hidden;
+}
+
+#inspector-header-refresh.htmx-request::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-indigo);
+    border-radius: 50%;
+    animation: booru-spin 0.6s linear infinite;
+    box-sizing: border-box;
+}
+
+@keyframes booru-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

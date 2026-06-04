@@ -45,6 +45,7 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                     hx-include='#inspector-content input[name=id]'
                     hx-target={`article[data-image-id="${image.id}"]`}
                     hx-swap='outerHTML'
+                    hx-indicator='#inspector-header-refresh'
                     class='rounded p-1 hover-surface'
                 >
                     <img
