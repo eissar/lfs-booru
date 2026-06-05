@@ -16,8 +16,17 @@ For code style and design preferences around error handling, fatal preconditions
 - Avoid custom error class trees, result wrappers, excessive generics, and effect-system-style abstractions unless they materially improve correctness or encode real invariants.
 
 ## Testing
-As the project is currently in a prototypal state,
-testing is on hold for now.
+
+Run all tests: `deno task test`
+
+Tests are in `./test/` and are **functional/integration tests** that require a running server (`BOORU_BASE_URL`, defaults to `http://127.0.0.1:8000`).
+
+Test files:
+- `server_functional_test.ts` — HTTP endpoint behavior (gallery, filters, error handling)
+- `ingest_test.ts` — image upload and tag management
+- `layout_test.ts` — masonry grid layout stability (uses Playwright)
+
+Ensure the server is running before running tests. If it is not reachable, alert the user and continue without running tests.
 
 ## Documentation Requirements
 
