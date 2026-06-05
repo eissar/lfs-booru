@@ -138,6 +138,37 @@ function SortOptions({ sort }: { sort: ItemsFilter['sort'] }) {
     );
 }
 
+/**
+ * Renders the replaceable gallery content region.
+ *
+ * @param props Gallery filter and photo grid state.
+ * @returns Gallery content markup.
+ */
+export function GalleryContent({
+    search,
+    params,
+}: {
+    search: ItemsFilter;
+    params: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+}) {
+    return (
+        <div class='gallery-content'>
+            <div id='filter-bar'>
+                <FilterBar f={search} />
+            </div>
+            <div id='gallery-layout' class='layout'>
+                <section class='main-content'>
+                    <PhotoGrid
+                        cards={params.cards}
+                        offset={params.offset}
+                        hasMore={params.hasMore}
+                    />
+                </section>
+            </div>
+        </div>
+    );
+}
+
 // initial page load
 export function GalleryPage({
     title,
@@ -377,20 +408,7 @@ export function GalleryPage({
                     <script>
                         {`try{if(localStorage.getItem('inspector-open')==='true')document.getElementById('gallery-main')?.classList.add('inspector-open')}catch(_){}`}
                     </script>
-                    <div class='gallery-content'>
-                        <div id='filter-bar'>
-                            <FilterBar f={search} />
-                        </div>
-                        <div id='gallery-layout' class='layout'>
-                            <section class='main-content'>
-                                <PhotoGrid
-                                    cards={params.cards}
-                                    offset={params.offset}
-                                    hasMore={params.hasMore}
-                                />
-                            </section>
-                        </div>
-                    </div>
+                    <GalleryContent search={search} params={params} />
                     <InspectorShell />
                 </main>
                 <div id='toasts-log' />

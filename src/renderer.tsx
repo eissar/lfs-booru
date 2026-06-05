@@ -5,7 +5,7 @@ import { ItemsFilter } from '@/index_store.ts';
 import { ComponentChildren } from 'preact';
 import { ItemCard } from '@/template/ItemCard.tsx';
 import PhotoGrid from '@/template/PhotoGridFragment.tsx';
-import { GalleryPage } from '@/template/GalleryPage.tsx';
+import { GalleryContent, GalleryPage } from '@/template/GalleryPage.tsx';
 import Inspector from './template/InspectorFragment.tsx';
 
 /**
@@ -48,6 +48,17 @@ export interface HtmlRenderer {
      * @returns Rendered HTML fragment.
      */
     renderInspector(image: GalleryImage): Promise<string>;
+
+    /**
+     * Render a gallery content fragment.
+     *
+     * @param input Gallery filter and photo grid state.
+     * @returns Rendered gallery content HTML fragment.
+     */
+    renderGalleryContent(input: {
+        filter: ItemsFilter;
+        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+    }): Promise<string>;
 
     /**
      * Render a photo grid fragment from image records.
@@ -122,6 +133,19 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     async renderInspector(image: GalleryImage): Promise<string> {
         return await Promise.resolve(renderToString(
             <Inspector image={image} />,
+        ));
+    }
+
+    /** {@inheritDoc HtmlRenderer.renderGalleryContent} */
+    async renderGalleryContent(input: {
+        filter: ItemsFilter;
+        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+    }): Promise<string> {
+        return await Promise.resolve(renderToString(
+            <GalleryContent
+                search={input.filter}
+                params={input.photoGridParam}
+            />,
         ));
     }
 
