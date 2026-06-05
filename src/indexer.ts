@@ -1,4 +1,4 @@
-import type { DerivedIndexStore } from './index_store.ts';
+import type { DerivedIndexStore, IndexCursor } from './index_store.ts';
 import type { EventLogReader } from './event_log.ts';
 
 // TODO: consider
@@ -89,8 +89,9 @@ export type IndexResult = {
 /**
  * Replay unprocessed events from the event log into the derived index store.
  *
- * Reads events from the event log starting at the store's current cursor and
- * applies each event to the store, advancing the cursor.
+ * Batches all unprocessed events into a temporary NDJSON file and applies them
+ * in one call to {@link DerivedIndexStore.applyEventsFromFile}, avoiding per-event
+ * index file writes.
  *
  * @param store Derived index store to apply events to.
  * @param eventLog Source event log to read events from.
@@ -102,15 +103,33 @@ export async function processEvents(
 ): Promise<IndexResult> {
     let eventFileCount = 0;
     let lastShard: string | undefined;
-
     let eventCount = 0;
-    for await (const { event, cursor } of eventLog.readEvents(store.getCursor())) {
-        if (cursor.eventFile !== lastShard) {
-            eventFileCount++;
-            lastShard = cursor.eventFile;
+
+    const startCursor = store.getCursor();
+    const startingOffset = startCursor?.byteOffset ?? 0;
+    let lastCursor: IndexCursor | undefined;
+
+    const tempFilePath = `${await Deno.makeTempDir({ prefix: 'process-events-' })}/events.ndjson`;
+
+    {
+        await using tempFile = await Deno.open(tempFilePath, { write: true, createNew: true });
+
+        for await (const { event, cursor } of eventLog.readEvents(startCursor)) {
+            if (cursor.eventFile !== lastShard) {
+                eventFileCount++;
+                lastShard = cursor.eventFile;
+            }
+
+            const line = JSON.stringify(event) + '\n';
+            await tempFile.write(new TextEncoder().encode(line));
+            lastCursor = cursor;
+            eventCount++;
         }
-        await store.applyEvent(event, cursor);
-        eventCount++;
+    }
+
+    // Apply all events in one batch.
+    if (lastCursor) {
+        await store.applyEventsFromFile(tempFilePath, lastCursor.eventFile, startingOffset);
     }
 
     const { images: imageCount, tags: tagCount } = await store.stats();
