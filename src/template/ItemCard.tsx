@@ -37,6 +37,11 @@ export function ItemCard({ image, renderOrder }: { image: GalleryImage; renderOr
 
     const imageInspect = `/fragment/inspect/${image.id}`;
 
+    let fetchPriority: 'high' | 'low' = 'low';
+    if (renderOrder! < 6) {
+        fetchPriority = 'high';
+    }
+
     return (
         <article class='masonry-item group' data-image-id={image.id} data-render-order-id={renderOrder}>
             <div class='gallery-card relative overflow-hidden flex flex-col rounded-lg hover-card'>
@@ -77,6 +82,7 @@ export function ItemCard({ image, renderOrder }: { image: GalleryImage; renderOr
                 <img
                     src={thumbSrc}
                     loading='lazy'
+                    fetchpriority={fetchPriority}
                     width={image.width}
                     height={image.height}
                     style={`aspect-ratio: ${image.width}/${image.height}`}
