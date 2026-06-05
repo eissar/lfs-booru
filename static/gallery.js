@@ -6,17 +6,36 @@
     if (!grid) return;
     var pagination = grid.querySelector("#pagination-controls");
     var columns = grid.querySelectorAll(".masonry-column");
+
+    // Collect all articles from all columns and restore original server order.
+    var articles = [];
     for (var i = 0; i < columns.length; i++) {
       var col = columns[i];
       while (col.firstChild) {
-        if (pagination) {
-          grid.insertBefore(col.firstChild, pagination);
+        if (col.firstChild.nodeType === 1) {
+          articles.push(col.firstChild);
         } else {
-          grid.appendChild(col.firstChild);
+          // Non-element nodes (text, comments) go straight back
+          if (pagination) grid.insertBefore(col.firstChild, pagination);
+          else grid.appendChild(col.firstChild);
         }
       }
       col.remove();
     }
+
+    // Sort by the server-assigned render order index.
+    articles.sort(function (a, b) {
+      var aOrder = Number(a.dataset.renderOrderId);
+      var bOrder = Number(b.dataset.renderOrderId);
+      return aOrder - bOrder;
+    });
+
+    // Re-insert in correct order.
+    for (var i = 0; i < articles.length; i++) {
+      if (pagination) grid.insertBefore(articles[i], pagination);
+      else grid.appendChild(articles[i]);
+    }
+
     galleryColHeights = [];
   }
 

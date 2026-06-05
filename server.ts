@@ -194,7 +194,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
                 break;
             }
 
-            cards.push(ItemCard({ image: { ...img, id } }));
+            cards.push(ItemCard({ image: { ...img, id }, renderOrder: listed }));
             listed++;
         }
 
@@ -283,7 +283,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             }
 
             const image = { ...img, id: id };
-            if (img.oid) cards.push(ItemCard({ image: image }));
+            if (img.oid) cards.push(ItemCard({ image: image, renderOrder: listed }));
             listed++;
         }
 
@@ -354,7 +354,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
                 break;
             }
 
-            cards.push(ItemCard({ image: { ...img, id } }));
+            cards.push(ItemCard({ image: { ...img, id }, renderOrder: listed }));
             listed++;
         }
 

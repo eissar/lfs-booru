@@ -27,16 +27,18 @@ function tagFragmentHref(tag: string): string {
  *
  * @param props Component props.
  * @param props.image Image record to render.
+ * @param props.renderOrder Positional index of this card in the server listing.
+ *   Used by the client-side masonry layout to restore sort order after column recalculation.
  * @returns The item card JSX element.
  */
-export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
+export function ItemCard({ image, renderOrder }: { image: GalleryImage; renderOrder?: number }): JSX.Element {
     let thumbSrc = `/image/${image.oid}`;
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
     const imageInspect = `/fragment/inspect/${image.id}`;
 
     return (
-        <article class='masonry-item group' data-image-id={image.id}>
+        <article class='masonry-item group' data-image-id={image.id} data-render-order-id={renderOrder}>
             <div class='gallery-card relative overflow-hidden flex flex-col rounded-lg hover-card'>
                 <div
                     class='gallery-card-meta block p-4 w-full peer order-2'
