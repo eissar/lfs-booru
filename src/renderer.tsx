@@ -40,7 +40,7 @@ export interface HtmlRenderer {
         filter: ItemsFilter;
         /** Page title. */
         title: string;
-        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+        photoGridParam: Parameters<HtmlRenderer['renderCardGrid']>[0];
     }): Promise<string>;
 
     /**
@@ -59,16 +59,16 @@ export interface HtmlRenderer {
      */
     renderGalleryContent(input: {
         filter: ItemsFilter;
-        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+        photoGridParam: Parameters<HtmlRenderer['renderCardGrid']>[0];
     }): Promise<string>;
 
     /**
-     * Render a photo grid fragment from image records.
+     * Render a card grid fragment from image records.
      *
      * @param input Photo grid images and pagination state.
-     * @returns Rendered photo grid HTML fragment.
+     * @returns Rendered card grid HTML fragment.
      */
-    renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string>;
+    renderCardGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string>;
 
     /**
      * Render a toast notification fragment.
@@ -125,7 +125,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         filter: ItemsFilter;
         /** Page title. */
         title: string;
-        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+        photoGridParam: Parameters<HtmlRenderer['renderCardGrid']>[0];
     }): Promise<string> {
         return await Promise.resolve(`<!DOCTYPE html>\n${
             renderToString(
@@ -149,7 +149,7 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     /** {@inheritDoc HtmlRenderer.renderGalleryContent} */
     async renderGalleryContent(input: {
         filter: ItemsFilter;
-        photoGridParam: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+        photoGridParam: Parameters<HtmlRenderer['renderCardGrid']>[0];
     }): Promise<string> {
         return await Promise.resolve(renderToString(
             <GalleryContent
@@ -159,12 +159,8 @@ export class CachingHtmlRenderer implements HtmlRenderer {
         ));
     }
 
-    // TODO: rename to renderCardGrid ?
-    //
-    /** {@inheritDoc HtmlRenderer.renderPhotoGrid}
-     * @param input Photo grid images and pagination state.
-     */
-    async renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string> {
+    /** {@inheritDoc HtmlRenderer.renderCardGrid} */
+    async renderCardGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string> {
         return await Promise.resolve(
             renderToString(<PhotoGrid cards={input.cards} offset={input.offset} hasMore={input.hasMore} />),
         );

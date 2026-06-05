@@ -147,7 +147,7 @@ export function GalleryContent({
     params,
 }: {
     search: ItemsFilter;
-    params: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+    params: Parameters<HtmlRenderer['renderCardGrid']>[0];
 }) {
     return (
         <div class='gallery-content'>
@@ -177,7 +177,7 @@ export function GalleryPage({
     title: string;
     version: string;
     search: ItemsFilter;
-    params: Parameters<HtmlRenderer['renderPhotoGrid']>[0];
+    params: Parameters<HtmlRenderer['renderCardGrid']>[0];
 }) {
     const hiddenTagInputs = search?.tags?.map((tag) => <HiddenInput key={tag} name='tags' value={tag} />);
 

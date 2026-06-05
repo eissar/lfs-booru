@@ -294,7 +294,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         const pushUrl = `/gallery?${url.searchParams.toString()}`;
 
         return c.html(
-            await render.renderPhotoGrid({
+            await render.renderCardGrid({
                 cards: cards,
                 offset: String(offset),
                 hasMore,
