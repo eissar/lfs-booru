@@ -63,7 +63,12 @@ function FilterBar({ f }: { f: ItemsFilter }) {
         params.append(exclKey, exclVal);
     }
 
-    return <>{chips}</>;
+    return (
+        <>
+            <HiddenInput name='limit' value={String(f.limit)} />
+            {chips}
+        </>
+    );
 }
 
 function InspectorShell() {

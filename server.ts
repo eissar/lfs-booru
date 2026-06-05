@@ -175,10 +175,11 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         if (deleted !== 'no') requestSearch.deleted = deleted;
 
         const search: ItemsFilter = { ...requestSearch };
-        if (offset) search.offset = offset;
+        const listedLimit = offset || requestSearch.limit;
         // always list an extra
         // so we can check if
         // there are more items left
+        search.limit = listedLimit;
         search.limit++;
 
         const itemsList = store.listItems(search);
@@ -188,7 +189,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
 
         let listed = 0;
         for await (const [id, img] of itemsList) {
-            if (listed >= requestSearch.limit) {
+            if (listed >= listedLimit) {
                 hasMore = true;
                 break;
             }
@@ -197,8 +198,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             listed++;
         }
 
-        if (offset) offset = offset + listed;
-        else offset = listed;
+        offset = listed;
 
         return c.html(
             await render.renderGalleryPage({
@@ -263,31 +263,41 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             if (raw === 'yes' || raw === 'both') deleted = raw;
         }
 
-        const opts: ItemsFilter = {
+        const requestSearch: ItemsFilter = {
             limit,
             tags,
             sort,
         };
-        if (offset) opts.offset = offset;
-        if (deleted !== 'no') opts.deleted = deleted;
+        if (deleted !== 'no') requestSearch.deleted = deleted;
 
-        const itemsList = store.listItems(opts);
+        const search: ItemsFilter = { ...requestSearch };
+        if (offset) {
+            search.offset = offset;
+            search.limit = offset + limit;
+        }
+        search.limit++;
+
+        const itemsList = store.listItems(search);
 
         const cards = [];
+        let hasMore = false;
+        let listed = 0;
         for await (const [id, img] of itemsList) {
+            if (listed >= requestSearch.limit) {
+                hasMore = true;
+                break;
+            }
+
             const image = { ...img, id: id };
             if (img.oid) cards.push(ItemCard({ image: image }));
+            listed++;
         }
 
-        let hasMore = true;
+        if (offset) offset = offset + listed;
+        else offset = listed;
 
-        // more accurately, store.listItems returns len items gt filter.limit
-        // but this is the easier, stateless way to do this without refactoring
-        // that function
-        if (limit > cards.length) hasMore = false;
-
-        if (offset) offset = offset + cards.length;
-        else offset = cards.length;
+        url.searchParams.set('offset', String(offset));
+        const pushUrl = `/gallery?${url.searchParams.toString()}`;
 
         return c.html(
             await render.renderPhotoGrid({
@@ -295,6 +305,8 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
                 offset: String(offset),
                 hasMore,
             }),
+            200,
+            { 'HX-Push-Url': pushUrl },
         );
     }
 }
