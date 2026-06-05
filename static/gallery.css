@@ -31,7 +31,6 @@ body.light-mode {
     --bg-primary: #f0f2f5;
     --bg-surface: #fff;
     --bg-surface-hover: #f8fafc;
-    --bg-header: rgb(255 255 255 / 80%);
     --bg-overlay: rgb(0 0 0 / 60%);
     --bg-input: #f8fafc;
     --bg-input-focus: #fff;
@@ -53,7 +52,6 @@ body.dark-mode {
     --bg-primary: #0f172a;
     --bg-surface: #1e293b;
     --bg-surface-hover: #334155;
-    --bg-header: rgb(30 41 59 / 80%);
     --bg-overlay: rgb(0 0 0 / 40%);
     --bg-input: #334155;
     --bg-input-focus: #475569;
@@ -75,7 +73,6 @@ body.light-mode {
     --bg-primary: #f0f2f5;
     --bg-surface: #fff;
     --bg-surface-hover: #f8fafc;
-    --bg-header: rgb(255 255 255 / 80%);
     --bg-overlay: rgb(0 0 0 / 60%);
     --bg-input: #f8fafc;
     --bg-input-focus: #fff;
@@ -96,7 +93,6 @@ body.dark-mode {
     --bg-primary: #0f172a;
     --bg-surface: #1e293b;
     --bg-surface-hover: #334155;
-    --bg-header: rgb(30 41 59 / 80%);
     --bg-overlay: rgb(0 0 0 / 40%);
     --bg-input: #334155;
     --bg-input-focus: #475569;
