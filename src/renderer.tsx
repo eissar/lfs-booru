@@ -13,6 +13,8 @@ import Inspector from './template/InspectorFragment.tsx';
  */
 export type GalleryImage = ImageState & { id: string };
 
+export type ToastVariant = 'error' | 'info' | 'warn';
+
 /**
  * Renders gallery HTML artifacts from derived image data.
  */
@@ -67,6 +69,14 @@ export interface HtmlRenderer {
      * @returns Rendered photo grid HTML fragment.
      */
     renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string>;
+
+    /**
+     * Render a toast notification fragment.
+     *
+     * @param input Toast message and optional variant.
+     * @returns Rendered toast HTML fragment.
+     */
+    renderToast(input: { message: string; variant?: ToastVariant }): Promise<string>;
 }
 
 /**
@@ -157,6 +167,14 @@ export class CachingHtmlRenderer implements HtmlRenderer {
     async renderPhotoGrid(input: { cards: ComponentChildren; offset: string; hasMore: boolean }): Promise<string> {
         return await Promise.resolve(
             renderToString(<PhotoGrid cards={input.cards} offset={input.offset} hasMore={input.hasMore} />),
+        );
+    }
+
+    /** {@inheritDoc HtmlRenderer.renderToast} */
+    async renderToast(input: { message: string; variant?: ToastVariant }): Promise<string> {
+        const variantClass = input.variant === 'error' ? 'booru-toast-error' : '';
+        return await Promise.resolve(
+            `<div class="booru-toast ${variantClass}" role="alert"><span>${input.message}</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
         );
     }
 }

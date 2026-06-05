@@ -213,7 +213,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         const id = url.pathname.split('/')[3];
         if (!id) {
             return c.html(
-                `<div class="booru-toast booru-toast-error" role="alert"><span>Missing image id</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
+                await render.renderToast({ message: 'Missing image id', variant: 'error' }),
                 400,
                 { 'HX-Reswap': 'beforeend' },
             );
@@ -221,7 +221,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         const img = await store.getImage(id);
         if (!img) {
             return c.html(
-                `<div class="booru-toast booru-toast-error" role="alert"><span>Could not find image</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
+                await render.renderToast({ message: 'Could not find image', variant: 'error' }),
                 404,
                 { 'HX-Reswap': 'beforeend' },
             );
@@ -236,13 +236,7 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         let offset: number | false = false;
         if (url.searchParams.has('offset')) {
             offset = Number(url.searchParams.get('offset'));
-            if (!isInt(offset) || offset < 0) {
-                return c.html(
-                    `<div class="booru-toast booru-toast-error" role="alert"><span>Invalid offset</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
-                    400,
-                    { 'HX-Reswap': 'beforeend' },
-                );
-            }
+            if (!isInt(offset) || offset < 0) return c.error('invalid offset');
         }
 
         const tags = url.searchParams.getAll('tags')
