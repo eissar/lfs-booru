@@ -66,6 +66,27 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                         alt='Refresh'
                     />
                 </button>
+                <button
+                    type='button'
+                    id='inspector-header-delete'
+                    hx-post='/delete'
+                    hx-include='#inspector-content input[name=id]'
+                    hx-target={`article[data-image-id="${image.id}"]`}
+                    hx-swap='delete'
+                    hx-indicator='#inspector-header-delete'
+                    class='rounded p-1 hover-surface'
+                    {...{
+                        'data-hx-on:htmx:before-request':
+                            `if(this.dataset.confirmed){delete this.dataset.confirmed;booruRequestMasonryReset?.()}else{event.preventDefault();this.dataset.confirmed='1';setTimeout(()=>delete this.dataset.confirmed,2000)}`,
+                    }}
+                >
+                    <img
+                        src='https://unpkg.com/heroicons@2.0.18/24/outline/trash.svg'
+                        class='h-4 w-4'
+                        style='filter: var(--icon-filter);'
+                        alt='Delete'
+                    />
+                </button>
                 <a
                     id='inspector-header-download'
                     href={`/image/${image.oid}`}

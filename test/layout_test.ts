@@ -15,6 +15,11 @@ type CardLayoutSnapshot = {
     height: number;
 };
 
+type MasonryColumnSnapshot = {
+    column: number;
+    ids: string[];
+};
+
 async function captureMasonryCardLayout(page: Page): Promise<CardLayoutSnapshot[]> {
     return await page.evaluate(() => {
         const grid = document.getElementById('photo-grid');
@@ -41,6 +46,79 @@ async function captureMasonryCardLayout(page: Page): Promise<CardLayoutSnapshot[
             };
         });
     });
+}
+
+async function captureMasonryColumns(page: Page): Promise<MasonryColumnSnapshot[]> {
+    return await page.evaluate(() => {
+        return Array.from(document.querySelectorAll<HTMLElement>('#photo-grid > .masonry-column')).map((column, i) => {
+            return {
+                column: i,
+                ids: Array.from(column.querySelectorAll<HTMLElement>('article.masonry-item')).map((article) => {
+                    const id = article.dataset.imageId;
+                    if (!id) throw new Error('Cannot snapshot masonry column: data-image-id missing');
+                    return id;
+                }),
+            };
+        });
+    });
+}
+
+function expectedMasonryColumns(ids: string[], columnCount: number): MasonryColumnSnapshot[] {
+    const columns = Array.from({ length: columnCount }, (_, column) => ({ column, ids: [] as string[] }));
+    ids.forEach((id, i) => columns[i % columnCount].ids.push(id));
+    return columns;
+}
+
+function visualOrderFromColumns(columns: MasonryColumnSnapshot[]): string[] {
+    const maxLength = Math.max(...columns.map((column) => column.ids.length));
+    const ids: string[] = [];
+
+    for (let row = 0; row < maxLength; row++) {
+        for (const column of columns) {
+            const id = column.ids[row];
+            if (id !== undefined) ids.push(id);
+        }
+    }
+
+    return ids;
+}
+
+function assertMasonryColumnsEqual(
+    actual: MasonryColumnSnapshot[],
+    expected: MasonryColumnSnapshot[],
+    context: string,
+): void {
+    const actualJson = JSON.stringify(actual);
+    const expectedJson = JSON.stringify(expected);
+    if (actualJson !== expectedJson) {
+        throw new Error(`${context}: expected ${expectedJson}, got ${actualJson}`);
+    }
+}
+
+async function installSyntheticMasonryGrid(page: Page, count: number): Promise<void> {
+    await page.evaluate((cardCount) => {
+        const grid = document.getElementById('photo-grid');
+        if (!grid) throw new Error('Cannot install synthetic masonry grid: #photo-grid missing');
+
+        grid.className = 'masonry-grid';
+        grid.innerHTML = '';
+
+        for (let i = 0; i < cardCount; i++) {
+            const article = document.createElement('article');
+            article.className = 'masonry-item group';
+            article.dataset.imageId = String(i + 1);
+            article.dataset.renderOrderId = String(i);
+            article.innerHTML = '<div class="gallery-card"><img width="1" height="1" style="aspect-ratio:1/1"></div>';
+            grid.appendChild(article);
+        }
+
+        const pagination = document.createElement('div');
+        pagination.id = 'pagination-controls';
+        grid.appendChild(pagination);
+
+        globalThis.booruClearMasonry?.();
+        globalThis.booruLayoutMasonry?.();
+    }, count);
 }
 
 function assertStableMasonryCards(
@@ -330,6 +408,66 @@ Deno.test('masonry appends do not move existing cards', async () => {
         await page.waitForTimeout(100);
 
         await assertNextMasonryAppendIsAdditive(page, 'masonry append after resize and view changes');
+    } finally {
+        await browser.close();
+    }
+});
+
+Deno.test('masonry redistributes remaining cards after deleting an entire first column from offset page', async () => {
+    const browser = await chromium.launch({ headless: !Deno.env.get('DISPLAY') });
+
+    try {
+        const page = await browser.newPage({ viewport: { width: 1400, height: 1200 } });
+        page.setDefaultTimeout(1_000);
+
+        const response = await page.goto(`${BASE_URL}/gallery?limit=10&sort=idDesc&offset=20`, {
+            waitUntil: 'domcontentloaded',
+        });
+        if (!response?.ok()) {
+            throw new Error(`Cannot load gallery page: expected 200, got ${response?.status()}`);
+        }
+
+        await installSyntheticMasonryGrid(page, 20);
+        await page.waitForFunction(() => document.querySelectorAll('#photo-grid > .masonry-column').length === 5);
+
+        const initialColumns = await captureMasonryColumns(page);
+        const initialIds = visualOrderFromColumns(initialColumns);
+        assertMasonryColumnsEqual(
+            initialColumns,
+            expectedMasonryColumns(initialIds, 5),
+            'initial synthetic offset masonry fixture',
+        );
+
+        const firstColumnIds = [...initialColumns[0].ids];
+        if (firstColumnIds.length !== 4) {
+            throw new Error(`Expected first column to contain 4 cards, got ${firstColumnIds.length}`);
+        }
+
+        await page.evaluate((ids) => {
+            for (const id of ids) {
+                document.querySelector(`article[data-image-id="${id}"]`)?.remove();
+            }
+        }, firstColumnIds);
+
+        const remainingIds = initialIds.filter((id) => !firstColumnIds.includes(id));
+        const expectedColumns = expectedMasonryColumns(remainingIds, 5);
+        await page.waitForFunction((expectedJson) => {
+            const actual = Array.from(document.querySelectorAll<HTMLElement>('#photo-grid > .masonry-column')).map(
+                (column, i) => ({
+                    column: i,
+                    ids: Array.from(column.querySelectorAll<HTMLElement>('article.masonry-item')).map((article) =>
+                        article.dataset.imageId
+                    ),
+                }),
+            );
+            return JSON.stringify(actual) === expectedJson;
+        }, JSON.stringify(expectedColumns));
+
+        assertMasonryColumnsEqual(
+            await captureMasonryColumns(page),
+            expectedColumns,
+            'masonry columns after deleting the entire first column from an offset page',
+        );
     } finally {
         await browser.close();
     }
