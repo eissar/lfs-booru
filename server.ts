@@ -465,7 +465,12 @@ function createHandler(
             const form = await req.formData();
 
             const file = form.get('image') as File | null;
-            if (!file) return c.error('missing form field: image', 400);
+            if (!file) {
+                return c.html(
+                    await render.renderToast({ message: 'Missing form field: image', variant: 'error' }),
+                    400,
+                );
+            }
 
             const tagsRaw = (form.get('tags') as string) || '[]';
 
@@ -478,16 +483,27 @@ function createHandler(
                 })
                 .catch(() => null);
 
-            if (!tags) return c.error('tags must be a JSON array of strings', 400);
+            if (!tags) {
+                return c.html(
+                    await render.renderToast({ message: 'Tags must be a JSON array of strings', variant: 'error' }),
+                    400,
+                );
+            }
 
             const name = form.get('name') as string;
 
             const result = await ingest(lib, store, file, tags, name)
-                .catch((e) => {
+                .catch(async (e) => {
                     if (e.cause instanceof Response) {
-                        return c.error(e.message, 502);
+                        return c.html(
+                            await render.renderToast({ message: e.message, variant: 'error' }),
+                            502,
+                        );
                     }
-                    return c.error(e.message, 400);
+                    return c.html(
+                        await render.renderToast({ message: e.message, variant: 'error' }),
+                        400,
+                    );
                 });
             if (result instanceof Response) return result;
 
@@ -519,21 +535,37 @@ function createHandler(
                         }
                         throw err;
                     });
-            }).catch((err: unknown) => {
+            }).catch(async (err: unknown) => {
                 if (err instanceof Response) return err;
-                return c.error(`ingest failed: ${err instanceof Error ? err.message : String(err)}`, 500);
+                return c.html(
+                    await render.renderToast(
+                        { message: `Ingest failed: ${err instanceof Error ? err.message : String(err)}`, variant: 'error' },
+                    ),
+                    500,
+                );
             });
 
-            if (appendResult instanceof Error) return c.error(`error during event writing.`, 500);
+            if (appendResult instanceof Error) {
+                return c.html(
+                    await render.renderToast({ message: 'Error during event writing', variant: 'error' }),
+                    500,
+                );
+            }
             if (appendResult instanceof Response) return appendResult;
 
             const applyResult = await store.applyEvent(event, appendResult.cursor)
-                .catch(() => {
-                    return c.error('ERROR: could not apply event');
+                .catch(async () => {
+                    return c.html(
+                        await render.renderToast({ message: 'Could not apply event', variant: 'error' }),
+                        500,
+                    );
                 });
             if (applyResult instanceof Response) return applyResult;
 
-            return c.text('ok', 201);
+            return c.html(
+                await render.renderToast({ message: 'Image uploaded', variant: 'success' }),
+                201,
+            );
         }
 
         if (url.pathname === '/regen-thumbnail') {

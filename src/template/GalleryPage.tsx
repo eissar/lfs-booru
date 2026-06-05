@@ -372,7 +372,9 @@ export function GalleryPage({
                                             id='upload-form'
                                             hx-post='/ingest'
                                             hx-encoding='multipart/form-data'
-                                            hx-target='#upload-result'
+                                            hx-target='#toasts-log'
+                                            hx-target-error='#toasts-log'
+                                            hx-swap='beforeend'
                                             data-hx-on-dragover="event.preventDefault(); this.classList.add('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
                                             data-hx-on-dragleave="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500')"
                                             data-hx-on-drop="event.preventDefault(); this.classList.remove('opacity-75', 'outline-dashed', 'outline-2', 'outline-indigo-500'); if(event.dataTransfer.files.length > 0) document.getElementById('file-input').files = event.dataTransfer.files;"
@@ -393,11 +395,6 @@ export function GalleryPage({
                                                 Upload
                                             </button>
                                         </form>
-                                        <div
-                                            id='upload-result'
-                                            class='p-4 pt-0'
-                                            data-hx-on-before-swap='if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false; }'
-                                        />
                                     </div>
                                 </details>
                             </div>

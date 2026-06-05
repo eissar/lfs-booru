@@ -66,10 +66,7 @@ Deno.test('POST /ingest returns 201 with valid image', async () => {
             throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
         }
 
-        const body = await res.text();
-        if (body !== 'ok') {
-            throw new Error(`Expected body "ok", got "${body}"`);
-        }
+        await res.text();
     } finally {
         await deleteItemsByTag(tag);
     }
@@ -86,10 +83,7 @@ Deno.test('POST /ingest returns 201 with tags and name', async () => {
             throw new Error(`Expected 201, got ${res.status}: ${await res.text()}`);
         }
 
-        const body = await res.text();
-        if (body !== 'ok') {
-            throw new Error(`Expected body "ok", got "${body}"`);
-        }
+        await res.text();
     } finally {
         await deleteItemsByTag(tag);
     }
@@ -104,7 +98,7 @@ Deno.test('POST /ingest returns 400 when image field is missing', async () => {
     }
 
     const body = await res.text();
-    if (!body.includes('missing form field: image')) {
+    if (!body.includes('Missing form field: image')) {
         throw new Error(`Expected error about missing image field, got "${body}"`);
     }
 });
@@ -132,7 +126,7 @@ Deno.test('POST /ingest returns 400 for malformed tags (not JSON)', async () => 
     }
 
     const body = await res.text();
-    if (!body.includes('tags must be a JSON array of strings')) {
+    if (!body.includes('Tags must be a JSON array of strings')) {
         throw new Error(`Expected error about tags format, got "${body}"`);
     }
 });
@@ -146,7 +140,7 @@ Deno.test('POST /ingest returns 400 for malformed tags (not string array)', asyn
     }
 
     const body = await res.text();
-    if (!body.includes('tags must be a JSON array of strings')) {
+    if (!body.includes('Tags must be a JSON array of strings')) {
         throw new Error(`Expected error about tags format, got "${body}"`);
     }
 });
@@ -170,10 +164,7 @@ Deno.test('POST /ingest allows duplicate images', async () => {
             throw new Error(`Second upload: expected 201, got ${res2.status}: ${await res2.text()}`);
         }
 
-        const body = await res2.text();
-        if (body !== 'ok') {
-            throw new Error(`Expected body "ok", got "${body}"`);
-        }
+        await res2.text();
     } finally {
         await deleteItemsByTag(tag);
     }

@@ -13,7 +13,7 @@ import Inspector from './template/InspectorFragment.tsx';
  */
 export type GalleryImage = ImageState & { id: string };
 
-export type ToastVariant = 'error' | 'info' | 'warn';
+export type ToastVariant = 'error' | 'success' | 'info' | 'warn';
 
 /**
  * Renders gallery HTML artifacts from derived image data.
@@ -168,7 +168,9 @@ export class CachingHtmlRenderer implements HtmlRenderer {
 
     /** {@inheritDoc HtmlRenderer.renderToast} */
     async renderToast(input: { message: string; variant?: ToastVariant }): Promise<string> {
-        const variantClass = input.variant === 'error' ? 'booru-toast-error' : '';
+        let variantClass = '';
+        if (input.variant === 'error') variantClass = 'booru-toast-error';
+        if (input.variant === 'success') variantClass = 'booru-toast-success';
         return await Promise.resolve(
             `<div class="booru-toast ${variantClass}" role="alert"><span>${input.message}</span><button type="button" class="booru-toast-dismiss" hx-on-click="this.closest('.booru-toast').remove()">Dismiss</button></div>`,
         );
