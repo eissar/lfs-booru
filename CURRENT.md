@@ -1,4 +1,4 @@
-> Snapshot commit: HASH:e566dc8a2f84a2cdf8841283012bc306aa55e5c2
+> Snapshot commit: HASH:458d5ab1d26236d41826258e377ad3b12d3a4b4e
 
 # Codebase Snapshot
 
@@ -17,8 +17,7 @@ The committed event log is the metadata source of truth. JSON index files, repla
 - `scripts/render_lint_artifacts.ts` generates representative HTML artifacts for CSS linting
 - `scripts/find_unused_css.ts` scans CSS selectors against generated artifacts
 - `scripts/read_json_sync_bench.ts` creates `scripts/big.internal.json` if absent and benchmarks large JSON read and parse behavior
-- `scripts/smoke_thumbnail.ts` uses Playwright against a running server to check thumbnail error display behavior
-- `src/test_InitWith5Images.ts` is a five-image ingestion timing script that reads files from `$HOME/example-images`
+- `scripts/delete_delete_me.ts` bulk-deletes images tagged with a given tag via the HTTP API
 
 ## Configuration
 
@@ -68,10 +67,9 @@ src/
   renderer.tsx                    HtmlRenderer interface and file-backed gallery-page cache
   thumbnail.ts                    FFmpeg/mediaforge thumbnail generation
   template/                       Gallery page, item card, inspector, and photo-grid templates
-  types/                          Preact JSX type augmentations
 static/
   gallery.css                     Theme, masonry grid, inspector, and component styles
-scripts/                          Type dump, CSS lint artifacts/scanner, benchmarks, smoke checks
+scripts/                          Type dump, CSS lint artifacts/scanner, benchmarks, bulk delete
 libraries/template/               Clone source for user library repositories
 ```
 
@@ -88,10 +86,14 @@ Routes:
 | `/` | any | Redirects to `/gallery` with status 302 |
 | `/gallery?q=...` | any | Parses search tokens; `#tag` tokens become repeated `tags` parameters, other tokens become `keyword` |
 | `/gallery` | any | Renders the gallery shell with page size, sort, filter chips, upload form, and inspector shell |
-| `/fragment/items` | any | Lists images from the derived store and returns a photo-grid fragment |
 | `/fragment/inspect/:id` | any | Looks up an image by numeric ID and returns the inspector fragment |
+| `/fragment/items` | any | Lists images from the derived store with optional tags, sort, offset, and deleted filter; returns a photo-grid fragment |
+| `/fragment/gallery-content` | any | Lists images from the derived store and returns a gallery content fragment; used by filter-chip clicks |
 | `/ingest` | POST | Parses multipart upload, writes media and thumbnail files, appends and commits an add event, applies the event |
 | `/regen-thumbnail?id=...` | any | Regenerates a thumbnail, appends and commits a `regen_thumbnail` event, applies the event |
+| `/update-metadata` | POST | Updates image name from form-encoded `id` and `name` fields; appends and commits an `update_metadata` event, applies the event |
+| `/delete` | POST | Deletes an image by form-encoded `id`; appends and commits a `delete` event, applies the event |
+| `/shutdown` | POST | Schedules process exit after the response is sent |
 | `/image/:oid` | any | Serves a thumbnail file when present, otherwise resolves the image by OID and reads the local Git LFS object |
 | `/static/*` | any | Serves files from `./static` |
 | other paths | any | Returns 404 text |
@@ -254,8 +256,7 @@ A library repository created from `libraries/template` contains:
 - `scripts/render_lint_artifacts.ts` writes representative gallery, card, and photo-grid HTML under `.lint-artifacts/`
 - `scripts/find_unused_css.ts` compares CSS selectors against generated content and can fail on possibly unused selectors
 - `scripts/read_json_sync_bench.ts` measures large JSON index read behavior using `scripts/big.internal.json`
-- `scripts/smoke_thumbnail.ts` checks that thumbnail-generation failure text reaches the upload result area in the browser
-- `src/test_InitWith5Images.ts` measures Git and event ingest timing for five PNG files in a fresh local library
+- `scripts/delete_delete_me.ts` bulk-deletes images tagged with a given tag via the galleries HTTP `/delete` endpoint
 - `build.internal.sh` sends keystrokes to a tmux pane to restart the server with `--clear-artifacts` and a local library path
 
 ## Implementation Constraints
