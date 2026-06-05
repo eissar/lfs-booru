@@ -714,6 +714,15 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
     overflow-wrap: anywhere;
 }
 
+/* Show placeholder text when inspector content is empty */
+#inspector-content:empty::after {
+    content: 'Select an image to inspect it.';
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.25;
+}
+
 .main-scroll {
     overflow: hidden;
 }

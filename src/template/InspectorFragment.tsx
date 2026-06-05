@@ -78,6 +78,8 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                     {...{
                         'data-hx-on:htmx:before-request':
                             `if(this.dataset.confirmed){delete this.dataset.confirmed;booruRequestMasonryReset?.()}else{event.preventDefault();this.dataset.confirmed='1';setTimeout(()=>delete this.dataset.confirmed,2000)}`,
+                        'data-hx-on:htmx:after-request':
+                            `if(event.detail.successful)document.getElementById('inspector-content').innerHTML=''`,
                     }}
                 >
                     <img

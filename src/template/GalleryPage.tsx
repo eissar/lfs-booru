@@ -100,9 +100,7 @@ function InspectorShell() {
                     id='inspector-content'
                     class='inspector-body min-h-0 flex-1 overflow-y-auto'
                     data-hx-on-after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
-                >
-                    <p class='text-xs text-muted'>Select an image to inspect it.</p>
-                </div>
+                ></div>
             </div>
         </aside>
     );
