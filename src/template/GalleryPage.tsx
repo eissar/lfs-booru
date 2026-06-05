@@ -33,11 +33,11 @@ function FilterBar({ f }: { f: ItemsFilter }) {
         params.delete(exclKey, exclVal);
 
         let removeUrl = '/gallery';
-        let fragmentUrl = '/fragment/items';
+        let fragmentUrl = '/fragment/gallery-content';
 
         if (params.size > 0) {
             removeUrl = `/gallery?${params.toString()}`;
-            fragmentUrl = `/fragment/items?${params.toString()}`;
+            fragmentUrl = `/fragment/gallery-content?${params.toString()}`;
         }
 
         chips.push(
@@ -49,11 +49,9 @@ function FilterBar({ f }: { f: ItemsFilter }) {
                 <a
                     href={removeUrl}
                     hx-get={fragmentUrl}
-                    hx-target='#photo-grid'
+                    hx-target='.gallery-content'
                     hx-target-error='#toasts-log'
                     hx-swap='outerHTML'
-                    hx-push-url={removeUrl}
-                    data-hx-on-after-request="if (event.detail.successful) event.currentTarget.closest('.filter-chip').remove()"
                 >
                     #{displayText}×
                 </a>
@@ -282,9 +280,13 @@ export function GalleryPage({
                                                 id='preferences'
                                                 method='get'
                                                 action='/gallery'
+                                                hx-get='/fragment/gallery-content'
+                                                hx-target='.gallery-content'
+                                                hx-target-error='#toasts-log'
+                                                hx-swap='outerHTML'
+                                                hx-include='#filter-bar'
                                                 class='p-4 rounded-md space-y-3'
                                             >
-                                                {hiddenTagInputs}
                                                 <label class='block text-sm font-medium' for='page-size-input'>
                                                     Page size
                                                 </label>

@@ -10,14 +10,25 @@ export default function Inspector({ image }: { image: GalleryImage }) {
     let thumbSrc = `/image/${image.oid}`;
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
+    // TODO: Make fallback tag links include the current filter set when that state is available here.
     const tags = image.tags.map((tag) => {
         const params = new URLSearchParams();
         params.append('tags', tag);
         const tagUrl = `/gallery?${params.toString()}`;
+        const tagFragmentUrl = `/fragment/gallery-content?${params.toString()}`;
 
         return (
             <span class='text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge' key={tag}>
-                <a href={tagUrl}>{tag}</a>
+                <a
+                    href={tagUrl}
+                    hx-get={tagFragmentUrl}
+                    hx-include='#filter-bar'
+                    hx-target='.gallery-content'
+                    hx-target-error='#toasts-log'
+                    hx-swap='outerHTML'
+                >
+                    {tag}
+                </a>
             </span>
         );
     });

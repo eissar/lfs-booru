@@ -303,6 +303,75 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             { 'HX-Push-Url': pushUrl },
         );
     }
+
+    if (url.pathname === '/fragment/gallery-content') {
+        let limit = Number(url.searchParams.get('limit'));
+        if (!isInt(limit) || limit < MIN_LIMIT) limit = MIN_LIMIT;
+
+        let offset: number | false = false;
+        if (url.searchParams.has('offset')) {
+            offset = Number(url.searchParams.get('offset'));
+            if (!isInt(offset) || offset < 0) return c.error('invalid offset');
+        }
+
+        const tags = [
+            ...new Set(
+                url.searchParams.getAll('tags')
+                    .flatMap((value) => value.split(','))
+                    .map((tag) => tag.trim())
+                    .filter((tag) => tag.length > 0),
+            ),
+        ];
+
+        let sort: ItemSort = itemSortParameterMap['idDesc'];
+        if (url.searchParams.has('sort')) {
+            const match = itemSortParameterMap[url.searchParams.get('sort') ?? ''];
+            if (match !== undefined) sort = match;
+        }
+
+        let deleted: DeletedFilter = 'no';
+        if (url.searchParams.has('deleted')) {
+            const raw = url.searchParams.get('deleted') ?? '';
+            if (raw === 'yes' || raw === 'both') deleted = raw;
+        }
+
+        const requestSearch: ItemsFilter = { limit, tags, sort };
+        if (deleted !== 'no') requestSearch.deleted = deleted;
+
+        const search: ItemsFilter = { ...requestSearch };
+        const listedLimit = offset || requestSearch.limit;
+        search.limit = listedLimit;
+        search.limit++;
+
+        const itemsList = store.listItems(search);
+
+        const cards = [];
+        let hasMore = false;
+        let listed = 0;
+        for await (const [id, img] of itemsList) {
+            if (listed >= listedLimit) {
+                hasMore = true;
+                break;
+            }
+
+            cards.push(ItemCard({ image: { ...img, id } }));
+            listed++;
+        }
+
+        offset = listed;
+
+        const canonicalParams = itemFilterToSearchParams(requestSearch);
+        const pushUrl = `/gallery?${canonicalParams.toString()}`;
+
+        return c.html(
+            await render.renderGalleryContent({
+                filter: requestSearch,
+                photoGridParam: { cards, offset: String(offset), hasMore },
+            }),
+            200,
+            { 'HX-Push-Url': pushUrl },
+        );
+    }
 }
 
 function createHandler(

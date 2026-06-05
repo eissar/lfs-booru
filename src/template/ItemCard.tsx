@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import type { GalleryImage } from '@/renderer.tsx';
 
+// TODO: Make fallback tag links include the current filter set when that state is available here.
 function tagHref(tag: string): string {
     const search = new URLSearchParams();
     search.append('tags', tag);
@@ -9,6 +10,16 @@ function tagHref(tag: string): string {
     if (query) return `/gallery?${query}`;
 
     return '/gallery';
+}
+
+function tagFragmentHref(tag: string): string {
+    const search = new URLSearchParams();
+    search.append('tags', tag);
+
+    const query = search.toString();
+    if (query) return `/fragment/gallery-content?${query}`;
+
+    return '/fragment/gallery-content';
 }
 
 /**
@@ -39,12 +50,23 @@ export function ItemCard({ image }: { image: GalleryImage }): JSX.Element {
                     <div class='flex flex-wrap gap-2 text-xs mt-2'>
                         {image.tags.map((tag) => {
                             const tagUrl = tagHref(tag);
+                            const tagFragmentUrl = tagFragmentHref(tag);
                             return (
                                 <span
                                     key={tag}
                                     class='text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge'
                                 >
-                                    <a class='image-card-tags' href={tagUrl}>{tag}</a>
+                                    <a
+                                        class='image-card-tags'
+                                        href={tagUrl}
+                                        hx-get={tagFragmentUrl}
+                                        hx-include='#filter-bar'
+                                        hx-target='.gallery-content'
+                                        hx-target-error='#toasts-log'
+                                        hx-swap='outerHTML'
+                                    >
+                                        {tag}
+                                    </a>
                                 </span>
                             );
                         })}
