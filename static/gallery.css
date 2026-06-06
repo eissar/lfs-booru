@@ -687,7 +687,8 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
     height: 100%;
     background-color: var(--bg-surface);
     border-left: 0 solid var(--border-color-light);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     transition: width 150ms ease-in-out, border-left-width 150ms ease-in-out;
 }
 
@@ -710,6 +711,15 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
     gap: 1rem;
     padding: 1rem;
     border-bottom: 1px solid var(--border-color-light);
+}
+
+.inspector-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color-light);
 }
 
 .inspector-body {
