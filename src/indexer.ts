@@ -1,17 +1,6 @@
 import type { DerivedIndexStore, IndexCursor } from './index_store.ts';
 import type { EventLogReader } from './event_log.ts';
 
-// TODO: consider
-//
-// enum Op {
-//     Add    = 'add',
-//     Remove = 'remove',
-//     Update = 'update',
-// }
-
-// TODO: evaluate - should
-// added be here or in it's
-// own index file ?
 export type ImageState = {
     oid: string;
     thumbnailOid?: string;
