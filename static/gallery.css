@@ -567,6 +567,11 @@ body:has(#gallery-view-list:checked) #photo-grid {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    align-items: stretch;
+}
+
+body:has(#gallery-view-list:checked) .masonry-column {
+    width: 100%;
 }
 
 body:has(#gallery-view-grid:checked) .masonry-item,
@@ -575,6 +580,7 @@ body:has(#gallery-view-list:checked) .masonry-item {
     width: 100%;
     margin-bottom: 0;
     break-inside: auto;
+    align-self: auto;
 }
 
 body:has(#gallery-view-grid:checked) #pagination-controls,
