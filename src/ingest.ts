@@ -1,3 +1,5 @@
+import { probeAsync, getDefaultVideoStream, summarizeVideoStream } from 'mediaforge';
+
 import { DerivedIndexStore } from '@/index_store.ts';
 import { AddEvent } from './indexer.ts';
 import { LibraryConnection as LibConn } from './library.ts';
@@ -161,8 +163,31 @@ export async function ingest(
     // we can async check for duplicates by image signature
     // later.
 
-    // TODO: parse image with async job to set dimensions ?
+    const fileExtension = detectMediaFileExtension(bytes);
+    if (!fileExtension) throw new Error('Cannot detect supported media type');
+
     //
+    // TODO: do dimension calculation in async job,
+    // and set dimensions via an update_metadata or similar event
+    // to avoid adding latency to the upload path
+    if (!height || !width) {
+        const tmpPath = await Deno.makeTempFile({ prefix: 'ingest_probe_', suffix: `.${fileExtension}` });
+        try {
+            await Deno.writeFile(tmpPath, bytes);
+            const info = await probeAsync(tmpPath);
+            const videoStream = getDefaultVideoStream(info);
+            if (videoStream) {
+                const { width: w, height: h } = summarizeVideoStream(videoStream);
+                if (!width && w) width = w;
+                if (!height && h) height = h;
+            }
+        } catch {
+            // Probe failed; dimensions remain undefined, normalized to 0 below.
+        } finally {
+            await Deno.remove(tmpPath).catch(() => {});
+        }
+    }
+
     // zero is falsy
     if (!height) height = 0;
     if (!width) width = 0;
@@ -171,9 +196,6 @@ export async function ingest(
 
     const id = await store.allocateImageId();
     if (!name) name = `Image ${id}`;
-
-    const fileExtension = detectMediaFileExtension(bytes);
-    if (!fileExtension) throw new Error('Cannot detect supported media type');
 
     const contentType = typeByExtension(`.${fileExtension}`) ?? 'application/octet-stream';
 
