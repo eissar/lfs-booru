@@ -61,7 +61,7 @@ Tag index writes use per-tag ID arrays (`Record<string, string[]>`). The `listIt
 
 ### Rendering boundary
 
-`CachingHtmlRenderer` implements `HtmlRenderer` with Preact JSX templates under `src/template/`. Gallery shell pages are cached under `index/artifacts/gallery-pages` keyed by a SHA-1 hash of renderer version and input filter. Item cards, inspector fragments, and photo-grid fragments are rendered on demand without caching.
+`CachingHtmlRenderer` implements `HtmlRenderer` with Preact JSX templates under `src/template/`. All rendering methods produce output via `renderToString` without disk caching. The `artifactsPath` constructor parameter exists but no method reads it.
 
 The renderer also produces toast notification HTML fragments used by the HTMX error-retargeting mechanism: fragment responses with error messages are targeted to `#toasts-log` instead of replacing the primary swap target.
 
@@ -120,7 +120,7 @@ Import reuses the normal ingest and store application logic, but batches event-l
 
 ```text
 /gallery
-  -> cached gallery shell from renderer
+  -> render gallery shell
   -> HTMX requests /fragment/items or /fragment/gallery-content
   -> JSON store loads/sorts/filters image state
   -> renderer creates item-card fragments and photo-grid/gallery-content fragment
@@ -186,7 +186,6 @@ Derived local files (ignored by `.gitignore`):
 - `index/image_state.json` — image metadata keyed by string numeric ID
 - `index/tag_index.json` — tag-to-image-ID mapping
 - `index/next_image_id` — monotonic ID allocator (text file)
-- `index/artifacts/gallery-pages/` — cached gallery HTML pages
 - `event_cursor` — replay checkpoint as JSON `{ eventFile, byteOffset }`
 
 The library `.gitignore` keeps derived files out of commits while allowing placeholders to preserve directories. JSON writes use temp files and rename per target file, but multi-file index updates are not a single transaction — a crash between writes can leave derived state inconsistent.
@@ -207,8 +206,8 @@ The template `.lfsconfig` configures LFS to fetch only `thumbnails/**` by defaul
 - ID allocation is monotonic and non-contiguous — deletion does not free IDs
 - `index/next_image_id` must contain an integer >= 1 for the JSON store to be considered initialized
 - `listItems` uses full-file loading, in-memory sorting, and OR tag matching across the tag index
-- Renderer gallery-page cache identity includes renderer version and input filter hash
 - Process-local mutexes serialize operations only inside one process and one store/event-log instance
+- Event replay (`processEvents`) accepts any `EventLogReader`, not requiring `NdjsonEventLog` specifically
 
 ## Failure Boundaries
 
@@ -268,7 +267,7 @@ The UI keeps client logic small by rendering gallery state on the server and upd
 
 ### Partial abstractions
 
-The code defines event-log and store interfaces, but replay still requires the concrete `NdjsonEventLog` (through `instanceof` in `processEvents`). The abstraction seam supports local organization but does not provide backend substitution for replay without changing `processEvents`.
+The code defines event-log and store interfaces that separate append, read, and replay concerns. `processEvents` accepts any `EventLogReader`, and the store is abstracted behind `DerivedIndexStore`. However, startup still constructs concrete `NdjsonEventLog` and `JsonFileIndexStore` instances, and `processEvents` reads batches through `applyEventsFromFile`, which is store-specific. The abstraction seams support local organization and testability but do not provide backend substitution through dependency injection without changing startup code.
 
 ### Append rollback coupled to the mutex
 

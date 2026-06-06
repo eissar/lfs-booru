@@ -1,4 +1,4 @@
-> Snapshot commit: HASH:458d5ab1d26236d41826258e377ad3b12d3a4b4e
+> Snapshot commit: HASH:5366877caebd40f76d408999841ed6f1241b50bf
 
 # Codebase Snapshot
 
@@ -25,8 +25,9 @@ The committed event log is the metadata source of truth. JSON index files, repla
 
 ```json
 {
-    "run": "deno run --allow-all ./server.ts",
+    "run": "deno run -A ./server.ts",
     "run:clean": "deno task run -A --clear-artifacts",
+    "test": "deno test -A --no-check && sg scan",
     "lint-artifacts": "deno run --allow-all scripts/render_lint_artifacts.ts && deno run --no-lock -A npm:stylelint 'static/**/*.css' '.lint-artifacts/**/*.css'"
 }
 ```
@@ -53,7 +54,6 @@ The checked-in `libraries/template/.lfsconfig` sets `lfs.url = http://localhost:
 server.ts                         HTTP startup, route dispatch, ingest, image serving, thumbnail regeneration
 src/
   cli.ts                          CLI/env parsing and path normalization
-  cli.internal.ts                 LFS-oriented flag parser used by scripts and tooling
   eagle-import.ts                 Eagle archive/library import into batched event append
   event_log.ts                    EventLog interfaces and NDJSON append/read implementation
   git.ts                          Library initialization and Git stage/commit helpers
@@ -64,11 +64,12 @@ src/
   library.ts                      LibraryConnection type alias
   logging.ts                      console.log duplication to app.log and debug/trace helpers
   pointer.ts                      Git LFS pointer helper utilities
-  renderer.tsx                    HtmlRenderer interface and file-backed gallery-page cache
+  renderer.tsx                    HtmlRenderer interface and CachingHtmlRenderer implementation
   thumbnail.ts                    FFmpeg/mediaforge thumbnail generation
   template/                       Gallery page, item card, inspector, and photo-grid templates
 static/
   gallery.css                     Theme, masonry grid, inspector, and component styles
+  gallery.js                      Client-side masonry layout, dark mode, inspector toggle, view switching
 scripts/                          Type dump, CSS lint artifacts/scanner, benchmarks, bulk delete
 libraries/template/               Clone source for user library repositories
 ```
@@ -121,7 +122,7 @@ Key behavior:
 
 The event model includes `add`, `tag_add`, `tag_remove`, `delete`, `regen_thumbnail`, and `update_metadata`.
 
-`processEvents(store, eventLog)` requires `eventLog instanceof NdjsonEventLog`, reads events from `store.getCursor()`, applies each event through the store, then returns image, tag, and event counts. The `eventFiles` counter exists in the result type but is not populated.
+`processEvents(store, eventLog)` accepts any `EventLogReader`, reads events from `store.getCursor()`, batches events per shard into temporary NDJSON files, and applies each shard batch via `store.applyEventsFromFile()`. This avoids per-event index file writes during startup replay.
 
 ### Ingest (`src/ingest.ts`)
 
@@ -143,9 +144,9 @@ Thumbnails are generated through `mediaforge` and FFmpeg. Video inputs extract a
 
 ### Rendering (`src/renderer.tsx`, `src/template/`)
 
-`CachingHtmlRenderer` renders item cards, gallery pages, inspector fragments, and photo-grid fragments using Preact JSX templates. Gallery pages are cached under `index/artifacts/gallery-pages` keyed by a SHA-1 hash of renderer version and input filter. Item cards, inspector fragments, and photo-grid fragments are not cached by the renderer.
+`CachingHtmlRenderer` implements `HtmlRenderer` using Preact JSX templates. All rendering methods (`renderImageCard`, `renderGalleryPage`, `renderInspector`, `renderGalleryContent`, `renderCardGrid`, `renderToast`) render fresh output via `renderToString` without disk caching. The `artifactsPath` constructor parameter exists but no method reads it.
 
-Templates use HTMX for upload, lazy item loading, pagination, filter chip updates, inspector loading, and thumbnail regeneration. `static/gallery.css` provides light and dark themes, masonry columns, component styles, and inspector layout.
+Templates use HTMX for upload, lazy item loading, pagination, filter chip updates, inspector loading, and thumbnail regeneration. `static/gallery.css` provides light and dark themes, masonry columns, component styles, and inspector layout. `static/gallery.js` provides client-side masonry column layout, dark mode toggling, inspector open/close, and gallery view switching.
 
 ### Utility (`src/util.ts`)
 
@@ -165,7 +166,7 @@ server.ts
   -> create CachingHtmlRenderer
   -> if --rebuild-index or store.isInitialized() is false:
        initializeEmptyIndex()
-       processEvents(store, eventLog)
+  -> processEvents(store, eventLog)       // always runs
   -> if --pack is set:
        ingestFromEagleSource(...)
   -> Deno.serve({ port }, withLogging(createHandler(...)))
@@ -181,7 +182,7 @@ POST /ingest multipart form
   -> git add event shard, media file, thumbnail file
   -> git commit -m "booru: add image {id}"
   -> store.applyEvent(event, appendResult.cursor)
-  -> return text "ok" with status 201
+  -> return success toast HTML with status 201
 ```
 
 ### Eagle import
@@ -220,12 +221,11 @@ GET /image/{oid}
 
 ```text
 processEvents
-  -> require NdjsonEventLog
   -> read cursor from JsonFileIndexStore
-  -> read sorted NDJSON shards after the cursor
-  -> JSON.parse each line
-  -> store.applyEvent(event, nextCursor)
-  -> stats()
+  -> read all sorted NDJSON shards after the cursor via EventLogReader
+  -> batch lines per shard into temporary NDJSON files
+  -> apply each shard batch via store.applyEventsFromFile()
+  -> log aggregate counts
 ```
 
 ## Persistence
@@ -244,7 +244,6 @@ A library repository created from `libraries/template` contains:
   index/next_image_id           Derived write-path ID allocator
   index/image_state.json        Derived image state
   index/tag_index.json          Derived tag index
-  index/artifacts/gallery-pages  Cached gallery HTML
   event_cursor                  Derived replay checkpoint
 ```
 
@@ -273,5 +272,7 @@ A library repository created from `libraries/template` contains:
 - ID allocation is monotonic and non-contiguous
 - `index/next_image_id` must contain an integer greater than or equal to 1 for the JSON store to be considered initialized
 - `listItems` uses full-file loading, in-memory sorting, and OR tag matching
-- Renderer gallery-page cache identity includes renderer version and input filter
+- `processEvents` accepts any `EventLogReader`, not only `NdjsonEventLog`
 - Process-local mutexes serialize operations only inside one process and one store/event-log instance
+- Duplicate content (same SHA-256 OID) is permitted — storage is content-addressable via OID while the numeric ID provides catalog entry identity
+- CLI flag `--rebuild-index` triggers `initializeEmptyIndex()` before replay; `--clear-artifacts` removes `index/artifacts/` before rendering starts
