@@ -86,6 +86,21 @@ export type IndexResult = {
     events: number;
 };
 
+async function applyShardBatch(
+    store: DerivedIndexStore,
+    tempDir: string,
+    shard: string,
+    lines: string[],
+    previousOffset: number,
+): Promise<void> {
+    const path = `${tempDir}/${shard}.ndjson`;
+    {
+        await using f = await Deno.open(path, { write: true, createNew: true });
+        await f.write(new TextEncoder().encode(lines.join('')));
+    }
+    await store.applyEventsFromFile(path, shard, previousOffset);
+}
+
 /**
  * Replay unprocessed events from the event log into the derived index store.
  *
@@ -101,43 +116,39 @@ export async function processEvents(
     store: DerivedIndexStore,
     eventLog: EventLogReader,
 ): Promise<IndexResult> {
-    let eventFileCount = 0;
-    let lastShard: string | undefined;
-    let eventCount = 0;
-
     const startCursor = store.getCursor();
+    const startEventFile = startCursor?.eventFile;
     const startingOffset = startCursor?.byteOffset ?? 0;
     let lastCursor: IndexCursor | undefined;
+    let eventCount = 0;
 
-    const tempFilePath = `${await Deno.makeTempDir({ prefix: 'process-events-' })}/events.ndjson`;
+    const tempDir = await Deno.makeTempDir({ prefix: 'process-events-' });
+    const shards = new Map<string, string[]>();
 
-    {
-        await using tempFile = await Deno.open(tempFilePath, { write: true, createNew: true });
-
-        for await (const { event, cursor } of eventLog.readEvents(startCursor)) {
-            if (cursor.eventFile !== lastShard) {
-                eventFileCount++;
-                lastShard = cursor.eventFile;
-            }
-
-            const line = JSON.stringify(event) + '\n';
-            await tempFile.write(new TextEncoder().encode(line));
-            lastCursor = cursor;
-            eventCount++;
+    for await (const { event, cursor } of eventLog.readEvents(startCursor)) {
+        let buf = shards.get(cursor.eventFile);
+        if (!buf) {
+            buf = [];
+            shards.set(cursor.eventFile, buf);
         }
+        buf.push(JSON.stringify(event) + '\n');
+        lastCursor = cursor;
+        eventCount++;
     }
 
-    // Apply all events in one batch.
-    if (lastCursor) {
-        await store.applyEventsFromFile(tempFilePath, lastCursor.eventFile, startingOffset);
+    for (const [shard, lines] of shards) {
+        const offset = shard === startEventFile ? startingOffset : 0;
+        await applyShardBatch(store, tempDir, shard, lines, offset);
     }
+
+    try { await Deno.remove(tempDir, { recursive: true }); } catch { /* ignore */ }
 
     const { images: imageCount, tags: tagCount } = await store.stats();
 
     const result: IndexResult = {
         images: imageCount,
         tags: tagCount,
-        eventFiles: eventFileCount,
+        eventFiles: shards.size,
         events: eventCount,
     };
 
