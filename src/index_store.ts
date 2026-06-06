@@ -145,6 +145,13 @@ export interface DerivedIndexStore {
      */
     stats(): Promise<{ images: number; tags: number }>;
 
+    /**
+     * Return all distinct tag names from the tag index.
+     *
+     * @returns Sorted array of all known tag strings.
+     */
+    getAllTags(): Promise<string[]>;
+
     close(): Promise<void> | void;
 }
 
@@ -506,6 +513,13 @@ export class JsonFileIndexStore implements DerivedIndexStore {
         };
     }
 
+    async getAllTags(): Promise<string[]> {
+        using _lock = await this.mu.acquire();
+        const indexPath = join(this.conn.path, 'index', 'tag_index.json');
+        const tagIndex = await readJsonFile<TagIndex>(indexPath);
+        return Object.keys(tagIndex);
+    }
+
     /**
      * Reserve the next image ID for a new add event.
      *
@@ -633,6 +647,12 @@ function applyEventToIndexState(
             if (!img || img.isDeleted) break;
 
             if (event.patch.name !== undefined) img.name = event.patch.name;
+
+            if (event.patch.tags !== undefined) {
+                for (const tag of img.tags) removeFromTag(tagIndex, tag, id);
+                img.tags = event.patch.tags;
+                for (const tag of img.tags) addToTag(tagIndex, tag, id);
+            }
             break;
         }
     }

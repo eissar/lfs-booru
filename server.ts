@@ -634,12 +634,31 @@ function createHandler(
             const name = nameRaw.trim();
             if (name.length === 0) return c.error('Invalid image name: value is empty', 400);
 
-            if (name === image.name) return c.html(await render.renderInspector({ ...image, id: String(id) }));
+            // Tags
+            const tagsRaw = form.get('tags');
+            if (typeof tagsRaw !== 'string') return c.error('Missing form field: tags', 400);
+            const newTags = tagsRaw.trim()
+                ? tagsRaw.split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0)
+                : [];
+            const currentSorted = [...image.tags].sort();
+            const newSorted = [...newTags].sort();
+            const tagsChanged =
+                currentSorted.length !== newSorted.length ||
+                currentSorted.some((t, i) => t !== newSorted[i]);
+
+            // Nothing changed — return current inspector
+            if (name === image.name && !tagsChanged) {
+                return c.html(await render.renderInspector({ ...image, id: String(id) }));
+            }
+
+            const patch: UpdateMetadataEvent['patch'] = {};
+            if (name !== image.name) patch.name = name;
+            if (tagsChanged) patch.tags = newTags;
 
             const event: UpdateMetadataEvent = {
                 op: 'update_metadata',
                 id,
-                patch: { name },
+                patch,
             };
 
             const appendResult = await eventLog.appendWithRollback(event, async (appendResult) => {
@@ -656,7 +675,11 @@ function createHandler(
                 .catch(() => c.error('ERROR: could not apply event'));
             if (applyResult instanceof Response) return applyResult;
 
-            return c.html(await render.renderInspector({ ...image, name, id: String(id) }));
+            const updatedImage = { ...image, id: String(id) };
+            if (patch.name !== undefined) updatedImage.name = patch.name;
+            if (patch.tags !== undefined) updatedImage.tags = patch.tags;
+
+            return c.html(await render.renderInspector(updatedImage));
         }
 
         if (url.pathname === '/delete' && req.method === 'POST') {

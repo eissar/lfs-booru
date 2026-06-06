@@ -11,7 +11,7 @@ export default function Inspector({ image }: { image: GalleryImage }) {
     if (image.thumbnailOid) thumbSrc = `/image/${image.thumbnailOid}`;
 
     // TODO: Make fallback tag links include the current filter set when that state is available here.
-    const tags = image.tags.map((tag) => {
+    const tagBadges = image.tags.map((tag) => {
         const params = new URLSearchParams();
         params.append('tags', tag);
         const tagUrl = `/gallery?${params.toString()}`;
@@ -33,8 +33,8 @@ export default function Inspector({ image }: { image: GalleryImage }) {
         );
     });
 
-    if (tags.length === 0) {
-        tags.push(<span class='text-xs text-muted'>No tags</span>);
+    if (tagBadges.length === 0) {
+        tagBadges.push(<span class='text-xs text-muted'>No tags</span>);
     }
 
     return (
@@ -120,14 +120,15 @@ export default function Inspector({ image }: { image: GalleryImage }) {
             <form
                 hx-post='/update-metadata'
                 hx-target='#inspector-content'
-                hx-swap='outerHTML'
+                hx-swap='innerHTML'
+                hx-indicator={`#inspector-name-save-${image.id}`}
             >
                 <ul class='space-y-4'>
                     <li class='flex flex-col gap-1'>
                         <span class='relative self-start inline-block font-medium text-sm'>
                             Name
                         </span>
-                        <form class='flex items-center gap-2'>
+                        <div class='flex items-center gap-2'>
                             <input type='hidden' name='id' value={image.id} />
                             <input
                                 id={`image-name-${image.id}`}
@@ -139,7 +140,12 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                                 autoComplete='off'
                                 spellcheck={false}
                             />
-                            <button type='submit' class='rounded p-1 hover-surface'>
+                            <button
+                                type='submit'
+                                id={`inspector-name-save-${image.id}`}
+                                class='rounded p-1 hover-surface'
+                                style='position: relative;'
+                            >
                                 <img
                                     src='https://unpkg.com/heroicons@2.0.18/24/outline/check.svg'
                                     alt='Save'
@@ -147,7 +153,41 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                                     style='filter: var(--icon-filter);'
                                 />
                             </button>
-                        </form>
+                        </div>
+                    </li>
+                    <li class='flex flex-col gap-2'>
+                        <span class='font-medium shrink-0 flex items-center gap-1'>
+                            Tags
+                            <button
+                                id={`tag-edit-btn-${image.id}`}
+                                type='button'
+                                class='rounded p-0.5 hover-surface'
+                                data-hx-on-click={`
+                                    const i = document.getElementById('image-tags-${image.id}');
+                                    i.classList.toggle('hidden');
+                                    if (!i.classList.contains('hidden')) i.focus();
+                                `}
+                            >
+                                <img
+                                    src='https://unpkg.com/heroicons@2.0.18/24/outline/pencil.svg'
+                                    class='h-3 w-3'
+                                    style='filter: var(--icon-filter);'
+                                    alt='Edit tags'
+                                />
+                            </button>
+                        </span>
+                        <div class='flex flex-wrap gap-2'>
+                            {tagBadges}
+                        </div>
+                        <input
+                            id={`image-tags-${image.id}`}
+                            class='hidden flex-1 min-w-0 input-focus-underline text-xs text-muted'
+                            type='text'
+                            name='tags'
+                            defaultValue={image.tags.join(' ')}
+                            autoComplete='off'
+                            spellcheck={false}
+                        />
                     </li>
                     <li class='flex flex-col gap-2'>
                         <span class='font-medium shrink-0'>OID</span>
@@ -167,12 +207,6 @@ export default function Inspector({ image }: { image: GalleryImage }) {
                     </li>
                 </ul>
             </form>
-            <div>
-                <h4 class='mb-2 text-sm font-medium'>Tags</h4>
-                <div class='flex flex-wrap gap-2'>
-                    {tags}
-                </div>
-            </div>
         </section>
     );
 }

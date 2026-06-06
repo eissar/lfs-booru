@@ -70,6 +70,7 @@ export type UpdateMetadataEvent = {
     id: number;
     patch: {
         name?: string;
+        tags?: string[];
     };
 };
 

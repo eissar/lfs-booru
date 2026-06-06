@@ -754,12 +754,14 @@ body:has(#gallery-view-list:checked) .gallery-card-meta {
 }
 
 #inspector-header-refresh.htmx-request img,
-#inspector-header-delete.htmx-request img {
+#inspector-header-delete.htmx-request img,
+[id^='inspector-name-save-'].htmx-request img {
     visibility: hidden;
 }
 
 #inspector-header-refresh.htmx-request::after,
-#inspector-header-delete.htmx-request::after {
+#inspector-header-delete.htmx-request::after,
+[id^='inspector-name-save-'].htmx-request::after {
     content: '';
     position: absolute;
     inset: 0;
