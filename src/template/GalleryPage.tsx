@@ -69,6 +69,43 @@ function FilterBar({ f }: { f: ItemsFilter }) {
     );
 }
 
+/**
+ * Base inspector footer markup. Reused by the gallery page shell and the
+ * `/fragment/inspector-footer` endpoint so the footer can reset itself
+ * on `InspectorNavigation` events.
+ */
+function InspectorFooter() {
+    return (
+        <>
+            <button
+                type='button'
+                hx-get='/genai/tags'
+                hx-include='#inspector-content input[name=id]'
+                hx-target='#inspector-footer'
+                hx-swap='beforeend'
+                class='rounded p-1 hover-surface'
+            >
+                <img
+                    src='https://unpkg.com/heroicons@2.0.18/24/outline/sparkles.svg'
+                    class='h-4 w-4'
+                    style='filter: var(--icon-filter);'
+                    alt='Suggest tags'
+                />
+            </button>
+            <p class='text-xs text-muted'>gen-ai</p>
+        </>
+    );
+}
+
+/**
+ * Render the base inspector footer as an HTML string.
+ *
+ * @returns HTML string containing the inspector footer markup.
+ */
+export function renderInspectorFooter(): string {
+    return renderToString(<InspectorFooter />);
+}
+
 function InspectorShell() {
     return (
         <aside
@@ -102,23 +139,14 @@ function InspectorShell() {
                     data-hx-on-after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
                 >
                 </div>
-                <footer id='inspector-footer' class='inspector-footer shrink-0'>
-                    <button
-                        type='button'
-                        hx-get='/genai/tags'
-                        hx-include='#inspector-content input[name=id]'
-                        hx-target='#inspector-footer'
-                        hx-swap='beforeend'
-                        class='rounded p-1 hover-surface'
-                    >
-                        <img
-                            src='https://unpkg.com/heroicons@2.0.18/24/outline/sparkles.svg'
-                            class='h-4 w-4'
-                            style='filter: var(--icon-filter);'
-                            alt='Suggest tags'
-                        />
-                    </button>
-                    <p class='text-xs text-muted'>gen-ai</p>
+                <footer
+                    id='inspector-footer'
+                    class='inspector-footer shrink-0'
+                    hx-trigger='InspectorNavigation from:body'
+                    hx-get='/fragment/inspector-footer'
+                    hx-swap='innerHTML'
+                >
+                    <InspectorFooter />
                 </footer>
             </div>
         </aside>

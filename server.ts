@@ -21,6 +21,7 @@ import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
 import { generateThumbnail } from '@/thumbnail.ts';
 import { ItemCard } from '@/template/ItemCard.tsx';
+import { renderInspectorFooter } from '@/template/GalleryPage.tsx';
 
 const MIN_LIMIT = 10;
 
@@ -227,7 +228,13 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
                 { 'HX-Reswap': 'beforeend' },
             );
         }
-        return c.html(await render.renderInspector({ ...img, id }));
+        return new Response(await render.renderInspector({ ...img, id }), {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'HX-Trigger': '{"InspectorNavigation": null}',
+            },
+        });
     }
 
     if (url.pathname === '/fragment/items') {
@@ -372,6 +379,10 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             200,
             { 'HX-Push-Url': pushUrl },
         );
+    }
+
+    if (url.pathname === '/fragment/inspector-footer') {
+        return c.html(renderInspectorFooter());
     }
 }
 
@@ -540,7 +551,10 @@ function createHandler(
                 if (err instanceof Response) return err;
                 return c.html(
                     await render.renderToast(
-                        { message: `Ingest failed: ${err instanceof Error ? err.message : String(err)}`, variant: 'error' },
+                        {
+                            message: `Ingest failed: ${err instanceof Error ? err.message : String(err)}`,
+                            variant: 'error',
+                        },
                     ),
                     500,
                 );
@@ -638,13 +652,10 @@ function createHandler(
             // Tags
             const tagsRaw = form.get('tags');
             if (typeof tagsRaw !== 'string') return c.error('Missing form field: tags', 400);
-            const newTags = tagsRaw.trim()
-                ? tagsRaw.split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0)
-                : [];
+            const newTags = tagsRaw.trim() ? tagsRaw.split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0) : [];
             const currentSorted = [...image.tags].sort();
             const newSorted = [...newTags].sort();
-            const tagsChanged =
-                currentSorted.length !== newSorted.length ||
+            const tagsChanged = currentSorted.length !== newSorted.length ||
                 currentSorted.some((t, i) => t !== newSorted[i]);
 
             // Nothing changed — return current inspector
@@ -723,7 +734,9 @@ function createHandler(
             const mediaPath = join(lib.path, image.path);
             const imageBytes = await Deno.readFile(mediaPath)
                 .catch((err: unknown) => {
-                    console.error(`[genai] Cannot read image file: ${err instanceof Error ? err.message : String(err)}`);
+                    console.error(
+                        `[genai] Cannot read image file: ${err instanceof Error ? err.message : String(err)}`,
+                    );
                     return null;
                 });
             if (!imageBytes) return c.error('Cannot read image file', 500);
@@ -732,7 +745,9 @@ function createHandler(
             const tags = await suggestTags(imageBytes, mimeType);
 
             const tagBadges = tags
-                .map((tag) => `<span class="text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">${tag}</span>`)
+                .map((tag) =>
+                    `<span class="text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">${tag}</span>`
+                )
                 .join(' ');
             return c.html(`<div class="flex flex-wrap gap-2">${tagBadges}</div>`);
         }
