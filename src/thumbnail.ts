@@ -2,13 +2,12 @@
  * Thumbnail generation for media files.
  *
  * Uses FFmpeg via mediaforge to extract and resize frames from images and videos.
- * All thumbnails are output as JPEG at a fixed size for maximum compatibility.
+ * All thumbnails are output as JPEG, scaled to fit within 320x320 while preserving
+ * the original aspect ratio. Smaller inputs are not upscaled.
  */
 
-import { ffmpeg, frameToBuffer } from 'mediaforge';
+import { ffmpeg } from 'mediaforge';
 
-const THUMBNAIL_SIZE = '320x320';
-const THUMBNAIL_FORMAT = 'mjpeg';
 const THUMBNAIL_QUALITY = 85;
 
 export const THUMBNAIL_FFMPEG_NOT_FOUND_MESSAGE = 'cannot generate thumbnail - ffmpeg not on PATH';
@@ -50,18 +49,28 @@ async function extractVideoThumbnail(_bytes: Uint8Array): Promise<Blob> {
     const tmpVideoPath = await Deno.makeTempFile({ prefix: 'thumb_video_', suffix: '.tmp' });
     await Deno.writeFile(tmpVideoPath, _bytes);
 
+    const tmpOutputPath = await Deno.makeTempFile({ prefix: 'thumb_video_out_', suffix: '.jpg' });
+
     try {
-        const buf = await frameToBuffer({
-            input: tmpVideoPath,
-            timestamp: 1, // 1 second in (safe for most videos)
-            format: THUMBNAIL_FORMAT,
-            size: THUMBNAIL_SIZE,
-        });
+        await ffmpeg(tmpVideoPath)
+            .seekInput(1) // 1 second in (safe for most videos)
+            .output(tmpOutputPath)
+            .videoFilter(
+                "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease",
+            )
+            .addOutputOption('-vframes', '1')
+            .addOutputOption('-q:v', String(Math.round((100 - THUMBNAIL_QUALITY) * 1.28)))
+            .run();
+
+        const outputBytes = await Deno.readFile(tmpOutputPath);
         // Slice to ensure ArrayBuffer backing (not SharedArrayBuffer).
-        const ab = buf.slice().buffer as ArrayBuffer;
+        const ab = outputBytes.slice().buffer as ArrayBuffer;
         return new Blob([new Uint8Array(ab)], { type: 'image/jpeg' });
     } finally {
         await Deno.remove(tmpVideoPath).catch(() => {
+            // Ignore cleanup errors
+        });
+        await Deno.remove(tmpOutputPath).catch(() => {
             // Ignore cleanup errors
         });
     }
@@ -82,7 +91,9 @@ async function resizeImageThumbnail(_bytes: Uint8Array): Promise<Blob> {
     try {
         await ffmpeg(tmpImagePath)
             .output(tmpOutputPath)
-            .size(THUMBNAIL_SIZE)
+            .videoFilter(
+                "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease",
+            )
             .addOutputOption('-q:v', String(Math.round((100 - THUMBNAIL_QUALITY) * 1.28)))
             .run();
 
