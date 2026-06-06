@@ -100,7 +100,26 @@ function InspectorShell() {
                     id='inspector-content'
                     class='inspector-body min-h-0 flex-1 overflow-y-auto'
                     data-hx-on-after-swap="document.getElementById('gallery-main')?.classList.add('inspector-open')"
-                ></div>
+                >
+                </div>
+                <footer id='inspector-footer' class='inspector-footer shrink-0'>
+                    <button
+                        type='button'
+                        hx-get='/genai/tags'
+                        hx-include='#inspector-content input[name=id]'
+                        hx-target='#inspector-footer'
+                        hx-swap='beforeend'
+                        class='rounded p-1 hover-surface'
+                    >
+                        <img
+                            src='https://unpkg.com/heroicons@2.0.18/24/outline/sparkles.svg'
+                            class='h-4 w-4'
+                            style='filter: var(--icon-filter);'
+                            alt='Suggest tags'
+                        />
+                    </button>
+                    <p class='text-xs text-muted'>gen-ai</p>
+                </footer>
             </div>
         </aside>
     );

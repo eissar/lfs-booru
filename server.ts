@@ -16,6 +16,7 @@ import { ingestFromEagleSource } from '@/eagle-import.ts';
 import { LibraryConnection as LibConn } from '@/library.ts';
 import { debug, trace } from '@/logging.ts';
 import { CachingHtmlRenderer, HtmlRenderer } from '@/renderer.tsx';
+import { suggestTags } from '@/genai.ts';
 import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
 import { generateThumbnail } from '@/thumbnail.ts';
@@ -710,6 +711,30 @@ function createHandler(
             // TODO: invalidate gallery page cache after delete
 
             return c.text('ok');
+        }
+
+        if (url.pathname === '/genai/tags') {
+            const id = url.searchParams.get('id');
+            if (!id) return c.error('Missing parameter: id', 400);
+
+            const image = await store.getImage(id);
+            if (!image) return c.error(`Could not find image "${id}"`, 404);
+
+            const mediaPath = join(lib.path, image.path);
+            const imageBytes = await Deno.readFile(mediaPath)
+                .catch((err: unknown) => {
+                    console.error(`[genai] Cannot read image file: ${err instanceof Error ? err.message : String(err)}`);
+                    return null;
+                });
+            if (!imageBytes) return c.error('Cannot read image file', 500);
+
+            const mimeType = image.contentType || 'application/octet-stream';
+            const tags = await suggestTags(imageBytes, mimeType);
+
+            const tagBadges = tags
+                .map((tag) => `<span class="text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm tag-badge">${tag}</span>`)
+                .join(' ');
+            return c.html(`<div class="flex flex-wrap gap-2">${tagBadges}</div>`);
         }
 
         if (url.pathname.startsWith('/static')) {
