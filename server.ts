@@ -21,7 +21,6 @@ import { c, isInt } from '@/util.ts';
 import { tryReadPointerSize } from '@/pointer.ts';
 import { generateThumbnail } from '@/thumbnail.ts';
 import { ItemCard } from '@/template/ItemCard.tsx';
-import { renderInspectorFooter } from '@/template/GalleryPage.tsx';
 
 const MIN_LIMIT = 10;
 
@@ -381,9 +380,6 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
         );
     }
 
-    if (url.pathname === '/fragment/inspector-footer') {
-        return c.html(renderInspectorFooter());
-    }
 }
 
 function createHandler(

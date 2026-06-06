@@ -69,11 +69,6 @@ function FilterBar({ f }: { f: ItemsFilter }) {
     );
 }
 
-/**
- * Base inspector footer markup. Reused by the gallery page shell and the
- * `/fragment/inspector-footer` endpoint so the footer can reset itself
- * on `InspectorNavigation` events.
- */
 function InspectorFooter() {
     return (
         <>
@@ -81,8 +76,8 @@ function InspectorFooter() {
                 type='button'
                 hx-get='/genai/tags'
                 hx-include='#inspector-content input[name=id]'
-                hx-target='#inspector-footer'
-                hx-swap='beforeend'
+                hx-target='#inspector-ai-tags'
+                hx-swap='innerHTML'
                 class='rounded p-1 hover-surface'
             >
                 <img
@@ -93,17 +88,9 @@ function InspectorFooter() {
                 />
             </button>
             <p class='text-xs text-muted'>gen-ai</p>
+            <div id='inspector-ai-tags' data-hx-on-InspectorNavigation='this.replaceChildren()' />
         </>
     );
-}
-
-/**
- * Render the base inspector footer as an HTML string.
- *
- * @returns HTML string containing the inspector footer markup.
- */
-export function renderInspectorFooter(): string {
-    return renderToString(<InspectorFooter />);
 }
 
 function InspectorShell() {
@@ -142,9 +129,6 @@ function InspectorShell() {
                 <footer
                     id='inspector-footer'
                     class='inspector-footer shrink-0'
-                    hx-trigger='InspectorNavigation from:body'
-                    hx-get='/fragment/inspector-footer'
-                    hx-swap='innerHTML'
                 >
                     <InspectorFooter />
                 </footer>
