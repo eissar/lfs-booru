@@ -132,7 +132,12 @@ export async function ingestFromEagleSource(
     const assetPaths: string[] = [];
     const encoder = new TextEncoder();
     let eventCount = 0;
-    const pendingWrites: { mediaPath: string; mediaBytes: Uint8Array; thumbnailPath: string; thumbnailBytes: Uint8Array }[] = [];
+    const pendingWrites: {
+        mediaPath: string;
+        mediaBytes: Uint8Array;
+        thumbnailPath: string;
+        thumbnailBytes: Uint8Array;
+    }[] = [];
 
     try {
         {

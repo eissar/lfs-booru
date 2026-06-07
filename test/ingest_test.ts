@@ -169,3 +169,112 @@ Deno.test('POST /ingest allows duplicate images', async () => {
         await deleteItemsByTag(tag);
     }
 });
+
+async function startTestServer(port: number, libPath: string, extraArgs: string[] = []): Promise<Deno.ChildProcess> {
+    const cmd = new Deno.Command(Deno.execPath(), {
+        args: [
+            'run',
+            '-A',
+            '--no-check',
+            './server.ts',
+            '--port',
+            String(port),
+            '--lib',
+            libPath,
+            ...extraArgs,
+        ],
+        stdout: 'inherit',
+        stderr: 'inherit',
+    });
+    const process = cmd.spawn();
+
+    let attempts = 0;
+    while (attempts < 50) {
+        const ready = await fetch(`http://127.0.0.1:${port}/gallery`)
+            .then(async (r) => {
+                await r.body?.cancel();
+                return r.status === 200;
+            })
+            .catch(() => false);
+        if (ready) break;
+        await new Promise((r) => setTimeout(r, 100));
+        attempts++;
+    }
+
+    if (attempts === 50) {
+        process.kill();
+        throw new Error(`Test server failed to start on port ${port}`);
+    }
+
+    return process;
+}
+
+async function shutdownTestServer(port: number, process: Deno.ChildProcess): Promise<void> {
+    await fetch(`http://127.0.0.1:${port}/shutdown`, { method: 'POST' })
+        .then((r) => r.body?.cancel())
+        .catch(() => {});
+    await process.status.catch(() => {});
+}
+
+Deno.test('Server startup thumbnail scanning and --no-scan-thumbnail flag', async () => {
+    const port = 8089;
+    const tempDir = await Deno.makeTempDir({ prefix: 'booru_test_lib_' });
+
+    const proc1 = await startTestServer(port, tempDir);
+
+    let thumbnailOid = '';
+    try {
+        const form = new FormData();
+        form.set('image', new File([MINIMAL_PNG.buffer as ArrayBuffer], 'test.png', { type: 'image/png' }));
+        form.set('tags', JSON.stringify(['startup-test']));
+
+        const res = await fetch(`http://127.0.0.1:${port}/ingest`, { method: 'POST', body: form });
+        if (res.status !== 201) {
+            throw new Error(`Failed to ingest test image: ${await res.text()}`);
+        }
+        await res.body?.cancel();
+
+        const statePath = `${tempDir}/index/image_state.json`;
+        const stateText = await Deno.readTextFile(statePath);
+        const state = JSON.parse(stateText);
+        // deno-lint-ignore no-explicit-any
+        const image = Object.values(state)[0] as any;
+        thumbnailOid = image.thumbnailOid;
+        if (!thumbnailOid) {
+            throw new Error('Ingested image has no thumbnail OID');
+        }
+
+        const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.jpg`;
+        const stat = await Deno.stat(thumbPath);
+        if (!stat.isFile) {
+            throw new Error('Thumbnail file was not written');
+        }
+    } finally {
+        await shutdownTestServer(port, proc1);
+    }
+
+    const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.jpg`;
+    await Deno.remove(thumbPath);
+
+    const proc2 = await startTestServer(port, tempDir, ['--no-scan-thumbnail']);
+    try {
+        const stat = await Deno.stat(thumbPath).catch(() => null);
+        if (stat) {
+            throw new Error('Thumbnail was generated even with --no-scan-thumbnail');
+        }
+    } finally {
+        await shutdownTestServer(port, proc2);
+    }
+
+    const proc3 = await startTestServer(port, tempDir);
+    try {
+        const stat = await Deno.stat(thumbPath).catch(() => null);
+        if (!stat || !stat.isFile) {
+            throw new Error('Thumbnail was not generated on startup');
+        }
+    } finally {
+        await shutdownTestServer(port, proc3);
+    }
+
+    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+});

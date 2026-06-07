@@ -53,6 +53,8 @@ export interface CliFlags {
     clearArtifacts: boolean;
     /** reset derived index artifacts and replay committed events from the beginning */
     rebuildIndex: boolean;
+    /** skip scanning for missing thumbnails on startup */
+    noScanThumbnail: boolean;
 }
 
 function parsePort(port: string): number {
@@ -82,8 +84,8 @@ type PrefArr = keyof typeof flagDefaults;
 export function getFlags(): CliFlags {
     const flags = parseArgs(Deno.args, {
         string: Object.keys(flagDefaults) as PrefArr[],
-        boolean: ['clear-artifacts', 'rebuild-index'],
-        default: { 'clear-artifacts': false, 'rebuild-index': false },
+        boolean: ['clear-artifacts', 'rebuild-index', 'no-scan-thumbnail'],
+        default: { 'clear-artifacts': false, 'rebuild-index': false, 'no-scan-thumbnail': false },
     });
 
     // fallback values if a flag is unset
@@ -117,5 +119,6 @@ export function getFlags(): CliFlags {
         pack: pack || undefined,
         clearArtifacts: flags['clear-artifacts'],
         rebuildIndex: flags['rebuild-index'],
+        noScanThumbnail: flags['no-scan-thumbnail'],
     };
 }

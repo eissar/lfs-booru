@@ -52,14 +52,16 @@ const populatedPhotoGrid = renderToString(
     }),
 );
 const emptyPhotoGrid = renderToString(h(PhotoGrid, { cards: [], offset: '0', hasMore: false }));
-const galleryPage = `<!DOCTYPE html>\n${renderToString(
-    h(GalleryPage, {
-        title: 'Lint gallery',
-        version: 'lint-artifact',
-        search: { limit: 25, offset: 0, tags: ['landscape', 'blue sky'] },
-        params: { cards: [], offset: '0', hasMore: false },
-    }),
-)}`;
+const galleryPage = `<!DOCTYPE html>\n${
+    renderToString(
+        h(GalleryPage, {
+            title: 'Lint gallery',
+            version: 'lint-artifact',
+            search: { limit: 25, offset: 0, tags: ['landscape', 'blue sky'] },
+            params: { cards: [], offset: '0', hasMore: false },
+        }),
+    )
+}`;
 const populatedGalleryPage = replaceInitialPhotoGrid(galleryPage, populatedPhotoGrid);
 
 const artifacts = new Map<string, string>([

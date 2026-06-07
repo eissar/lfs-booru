@@ -9,7 +9,13 @@ import type { EventLog, EventLogReader } from '@/event_log.ts';
 import { NdjsonEventLog } from '@/event_log.ts';
 import { Init, stageAndCommit } from '@/git.ts';
 import { DeletedFilter, DerivedIndexStore, ItemsFilter, ItemSort, JsonFileIndexStore } from '@/index_store.ts';
-import { type DeleteEvent, processEvents, type RegenThumbnailEvent, type UpdateMetadataEvent } from '@/indexer.ts';
+import {
+    type DeleteEvent,
+    type ImageState,
+    processEvents,
+    type RegenThumbnailEvent,
+    type UpdateMetadataEvent,
+} from '@/indexer.ts';
 import { ingest } from '@/ingest.ts';
 import { detectMediaFileExtension } from '@/ingest.ts';
 import { ingestFromEagleSource } from '@/eagle-import.ts';
@@ -56,6 +62,26 @@ export const itemSortParameterMap: Record<string, ItemSort> = {
     'addedAtDesc': { field: 'addedAt', direction: -1 },
 };
 
+/**
+ * Reads the bytes of a media file, pulling it from Git LFS first if it is a pointer.
+ *
+ * @param lib Library connection details.
+ * @param imagePath Relative path to the image file in the library.
+ * @returns Resolves with the raw bytes of the media file.
+ */
+async function readMediaBytes(lib: LibConn, imagePath: string): Promise<Uint8Array> {
+    const mediaPath = join(lib.path, imagePath);
+    let bytes = await Deno.readFile(mediaPath);
+
+    const decoded = new TextDecoder('utf-8').decode(bytes);
+    if (tryReadPointerSize(decoded) !== false) {
+        await simpleGit(lib.path).raw(['lfs', 'pull', '--include', imagePath, '--exclude', '']);
+        bytes = await Deno.readFile(mediaPath);
+    }
+
+    return bytes;
+}
+
 export async function reloadThumbnail(
     lib: LibConn,
     store: DerivedIndexStore,
@@ -66,8 +92,7 @@ export async function reloadThumbnail(
     const image = await store.getImage(id);
     if (!image) throw new Error(`Could not find image state for id "${id}"`);
 
-    const mediaPath = join(lib.path, image.path);
-    const bytes = await Deno.readFile(mediaPath);
+    const bytes = await readMediaBytes(lib, image.path);
 
     const detectedExtension = detectMediaFileExtension(bytes);
     const contentType = detectedExtension
@@ -379,7 +404,6 @@ async function handleUiRoutes(url: URL, store: DerivedIndexStore, render: HtmlRe
             { 'HX-Push-Url': pushUrl },
         );
     }
-
 }
 
 function createHandler(
@@ -588,7 +612,7 @@ function createHandler(
             if (!image) return c.error(`Could not find image "${id}"`, 404);
 
             const fileExtension = image.path.split('.').pop() ?? 'jpg';
-            const { oid: thumbnailOid, size: thumbnailSize, contentType } = await reloadThumbnail(
+            const { oid: thumbnailOid, size: _thumbnailSize, contentType } = await reloadThumbnail(
                 lib,
                 store,
                 id,
@@ -786,6 +810,139 @@ export function withLogging(
     };
 }
 
+/**
+ * Checks if a valid thumbnail file exists on disk for the given image.
+ *
+ * @param lib Library connection details.
+ * @param img Image state.
+ * @returns Resolves with true if the thumbnail exists, false otherwise.
+ */
+async function hasValidThumbnail(lib: LibConn, img: ImageState): Promise<boolean> {
+    if (!img.thumbnailOid) return false;
+    const thumbPath = join(lib.path, 'thumbnails', `${img.thumbnailOid}.jpg`);
+    const stat = await Deno.stat(thumbPath).catch(() => null);
+    return stat?.isFile ?? false;
+}
+
+/**
+ * Scans all non-deleted images in the index store and ensures that each has a thumbnail.
+ * If a thumbnail is missing, generates one and commits the event in a single batch.
+ *
+ * @param lib Library connection details.
+ * @param store Derived index store.
+ * @param eventLog NDJSON event log.
+ * @returns Resolves when scan and generation are complete.
+ */
+async function scanAndGenerateThumbnails(
+    lib: LibConn,
+    store: DerivedIndexStore,
+    eventLog: EventLog & EventLogReader,
+): Promise<void> {
+    console.log('Scanning for missing thumbnails...');
+    const missing: [string, ImageState][] = [];
+
+    for await (const [id, img] of store.listItems({ limit: Infinity, deleted: 'no' })) {
+        if (!(await hasValidThumbnail(lib, img))) {
+            missing.push([id, img]);
+        }
+    }
+
+    if (missing.length === 0) {
+        console.log('All thumbnails are up to date.');
+        return;
+    }
+
+    console.log(`Found ${missing.length} missing thumbnails. Starting batch generation...`);
+
+    const tempDir = await Deno.makeTempDir({ prefix: 'batch-thumbnails-' });
+    const preparedEventsPath = join(tempDir, 'events.ndjson');
+    const assetPaths: string[] = [];
+    const encoder = new TextEncoder();
+    let generatedCount = 0;
+    const pendingWrites: { thumbnailPath: string; thumbnailBytes: Uint8Array }[] = [];
+
+    try {
+        await using preparedEvents = await Deno.open(preparedEventsPath, { write: true, createNew: true });
+
+        for (const [id, img] of missing) {
+            console.log(`Generating thumbnail for image ID "${id}" (${img.path})...`);
+            const fileExtension = img.path.split('.').pop() ?? 'jpg';
+            const bytes = await readMediaBytes(lib, img.path).catch((err: unknown) => {
+                console.error(
+                    `Cannot read media file for image ID "${id}": ${err instanceof Error ? err.message : String(err)}`,
+                );
+                return null;
+            });
+            if (!bytes) continue;
+
+            const detectedExtension = detectMediaFileExtension(bytes);
+            const contentType = detectedExtension
+                ? typeByExtension(`.${detectedExtension}`) ?? 'application/octet-stream'
+                : 'application/octet-stream';
+
+            const thumbnailResult = await generateThumbnail(
+                bytes,
+                fileExtension,
+            ).catch((err: unknown) => {
+                console.error(
+                    `Cannot generate thumbnail for image ID "${id}": ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                );
+                return null;
+            });
+            if (!thumbnailResult) continue;
+
+            const { blob: thumbnailBlob, oid: thumbnailOid } = thumbnailResult;
+
+            const thumbnailBytes = new Uint8Array(await thumbnailBlob.arrayBuffer());
+            const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.jpg`);
+
+            const event: RegenThumbnailEvent = {
+                op: 'regen_thumbnail',
+                id: Number(id),
+                thumbnailOid,
+                contentType,
+            };
+
+            const eventBytes = encoder.encode(`${JSON.stringify(event)}\n`);
+            let bytesWritten = 0;
+            while (bytesWritten < eventBytes.byteLength) {
+                const written = await preparedEvents.write(eventBytes.subarray(bytesWritten));
+                if (written === 0) {
+                    throw new Error('Cannot write prepared batch event file: wrote zero bytes');
+                }
+                bytesWritten += written;
+            }
+
+            pendingWrites.push({ thumbnailPath, thumbnailBytes });
+            assetPaths.push(`thumbnails/${thumbnailOid}.jpg`);
+            generatedCount++;
+        }
+
+        if (generatedCount === 0) {
+            console.log('No thumbnails were successfully generated.');
+            return;
+        }
+
+        const appendResult = await eventLog.appendPreparedFileWithRollback(preparedEventsPath, async (appendResult) => {
+            // Write all thumbnail files inside the rollback boundary.
+            for (const { thumbnailPath, thumbnailBytes } of pendingWrites) {
+                await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
+                await Deno.writeFile(thumbnailPath, thumbnailBytes);
+            }
+
+            const paths = Array.from(new Set([appendResult.path, ...assetPaths]));
+            await stageAndCommit(paths, `booru: generate missing thumbnails for ${generatedCount} images`, lib);
+        });
+
+        await store.applyEventsFromFile(preparedEventsPath, appendResult.cursor.eventFile, appendResult.previousOffset);
+        console.log(`Successfully generated and committed ${generatedCount} missing thumbnails.`);
+    } finally {
+        await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+    }
+}
+
 // blocking
 async function Start() {
     // todo: process flags
@@ -831,6 +988,10 @@ async function Start() {
         console.log(`Importing Eagle pack: ${cfg.pack}`);
         const count = await ingestFromEagleSource(lib, store, eventLog, cfg.pack);
         console.log(`✅ Imported ${count} items from ${cfg.pack}`);
+    }
+
+    if (!cfg.noScanThumbnail) {
+        await scanAndGenerateThumbnails(lib, store, eventLog);
     }
 
     const abortController = new AbortController();

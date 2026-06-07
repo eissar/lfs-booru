@@ -1,4 +1,4 @@
-import { probeAsync, getDefaultVideoStream, summarizeVideoStream } from 'mediaforge';
+import { getDefaultVideoStream, probeAsync, summarizeVideoStream } from 'mediaforge';
 
 import { DerivedIndexStore } from '@/index_store.ts';
 import { AddEvent } from './indexer.ts';
