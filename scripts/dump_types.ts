@@ -146,7 +146,9 @@ function stripAsyncModifier<T extends ts.NodeArray<ts.ModifierLike> | undefined>
     ) as T;
 }
 
-function stripParameterInitializers(parameters: ts.NodeArray<ts.ParameterDeclaration>): ts.NodeArray<ts.ParameterDeclaration> {
+function stripParameterInitializers(
+    parameters: ts.NodeArray<ts.ParameterDeclaration>,
+): ts.NodeArray<ts.ParameterDeclaration> {
     return ts.factory.createNodeArray(parameters.map((parameter) =>
         ts.factory.updateParameterDeclaration(
             parameter,

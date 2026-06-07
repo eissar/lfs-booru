@@ -1,4 +1,4 @@
-import { chromium, type Browser, type Page } from 'npm:playwright@1.57.0';
+import { type Browser, chromium, type Page } from 'npm:playwright@1.57.0';
 
 const BASE_URL = Deno.env.get('BOORU_BASE_URL') ?? 'http://127.0.0.1:8000';
 
@@ -91,9 +91,9 @@ Deno.test('list view cards span the full width of the photo grid', {
         if (diff > 1) {
             throw new Error(
                 `List view card at index ${i} does not span full grid width: ` +
-                `card width=${Math.round(cardWidths[i])}px, ` +
-                `grid width=${Math.round(gridWidth)}px ` +
-                `(diff=${Math.round(diff)}px, tolerance=1px)`,
+                    `card width=${Math.round(cardWidths[i])}px, ` +
+                    `grid width=${Math.round(gridWidth)}px ` +
+                    `(diff=${Math.round(diff)}px, tolerance=1px)`,
             );
         }
     }

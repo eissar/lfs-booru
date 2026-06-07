@@ -1,9 +1,9 @@
 ---
 name: booru-update-docs
 description: >
-  CURRENT.md, ARCHITECTURE.md, dump_types: use when generating or refreshing
-  the lfs-booru checked-out-state and architecture documentation. Runs the type
-  dump script and aborts if uncommitted changes are present.
+    CURRENT.md, ARCHITECTURE.md, dump_types: use when generating or refreshing
+    the lfs-booru checked-out-state and architecture documentation. Runs the type
+    dump script and aborts if uncommitted changes are present.
 ---
 
 # booru-update-docs
@@ -253,4 +253,3 @@ After successfully updating the files, summarize:
 - the captured snapshot hash used for `CURRENT.md`
 - whether `deno run --allow-all scripts/dump_types.ts` succeeded
 - any files skipped during inspection
-
