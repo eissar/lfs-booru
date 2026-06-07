@@ -121,7 +121,7 @@ export type IngestResult = {
     event: AddEvent;
     /** Raw media bytes to write to `images/{id}.{ext}`. */
     mediaBytes: Uint8Array;
-    /** Raw thumbnail JPEG bytes to write to `thumbnails/{thumbOid}.jpg`. */
+    /** Raw thumbnail WebP bytes to write to `thumbnails/{thumbOid}.webp`. */
     thumbnailBytes: Uint8Array;
 };
 

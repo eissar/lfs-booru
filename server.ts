@@ -107,7 +107,7 @@ export async function reloadThumbnail(
 
     // Write the new thumbnail.
     const thumbnailBytes = new Uint8Array(await thumbnailBlob.arrayBuffer());
-    const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.jpg`);
+    const thumbnailPath = join(lib.path, 'thumbnails', `${thumbnailOid}.webp`);
     await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
     await Deno.writeFile(thumbnailPath, thumbnailBytes);
 
@@ -449,7 +449,7 @@ function createHandler(
             const url = new URL(req.url);
             const oid = url.pathname.split('/')[2];
 
-            const thumbRelPath = `thumbnails/${oid}.jpg`;
+            const thumbRelPath = `thumbnails/${oid}.webp`;
             const thumbPath = join(lib.path, thumbRelPath);
             const thumbnail: Deno.FileInfo | false = await Deno.stat(thumbPath)
                 .catch(() => {
@@ -460,7 +460,7 @@ function createHandler(
 
                 // not a pointer, return bytes
                 if (tryReadPointerSize(new TextDecoder('utf-8').decode(bytes)) === false) {
-                    return c.blob(bytes, 'image/jpeg');
+                    return c.blob(bytes, 'image/webp');
                 }
 
                 // if it is a pointer, check it out
@@ -468,7 +468,7 @@ function createHandler(
 
                 // and read again
                 bytes = await Deno.readFile(thumbPath);
-                return c.blob(bytes, 'image/jpeg');
+                return c.blob(bytes, 'image/webp');
             }
 
             const id = await store.getIdByOid(oid);
@@ -548,12 +548,12 @@ function createHandler(
                 await Deno.mkdir(dirname(mediaPath), { recursive: true });
                 await Deno.writeFile(mediaPath, mediaBytes);
 
-                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.jpg`);
+                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.webp`);
                 await Deno.mkdir(dirname(thumbnailPath), { recursive: true });
                 await Deno.writeFile(thumbnailPath, thumbnailBytes);
 
                 const paths = [appendResult.path, event.path];
-                if (event.thumbnailOid) paths.push(`thumbnails/${event.thumbnailOid}.jpg`);
+                if (event.thumbnailOid) paths.push(`thumbnails/${event.thumbnailOid}.webp`);
 
                 await stageAndCommit(paths, `booru: add image ${event.id}`, lib)
                     .catch((err) => {
@@ -627,7 +627,7 @@ function createHandler(
             };
 
             const appendResult = await eventLog.appendWithRollback(event, async (_appendResult) => {
-                const paths = [`thumbnails/${thumbnailOid}.jpg`];
+                const paths = [`thumbnails/${thumbnailOid}.webp`];
                 await stageAndCommit(paths, `booru: regenerate thumbnail ${id}`, lib);
             }).catch((err: unknown) => {
                 if (err instanceof Response) return err;
@@ -904,16 +904,6 @@ async function scanAndGenerateThumbnails(
                 thumbnailOid,
                 contentType,
             };
-
-            const eventBytes = encoder.encode(`${JSON.stringify(event)}\n`);
-            let bytesWritten = 0;
-            while (bytesWritten < eventBytes.byteLength) {
-                const written = await preparedEvents.write(eventBytes.subarray(bytesWritten));
-                if (written === 0) {
-                    throw new Error('Cannot write prepared batch event file: wrote zero bytes');
-                }
-                bytesWritten += written;
-            }
 
             pendingWrites.push({ thumbnailPath, thumbnailBytes });
             assetPaths.push(`thumbnails/${thumbnailOid}.jpg`);

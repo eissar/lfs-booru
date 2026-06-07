@@ -181,11 +181,11 @@ export async function ingestFromEagleSource(
                 }
 
                 const mediaPath = join(lib.path, event.path);
-                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.jpg`);
+                const thumbnailPath = join(lib.path, 'thumbnails', `${event.thumbnailOid}.webp`);
                 pendingWrites.push({ mediaPath, mediaBytes, thumbnailPath, thumbnailBytes });
 
                 assetPaths.push(event.path);
-                if (event.thumbnailOid) assetPaths.push(`thumbnails/${event.thumbnailOid}.jpg`);
+                if (event.thumbnailOid) assetPaths.push(`thumbnails/${event.thumbnailOid}.webp`);
                 eventCount++;
             }
         }

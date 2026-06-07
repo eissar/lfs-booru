@@ -5,7 +5,7 @@
 The repository implements a Git-backed media gallery with an event-sourced metadata model.
 
 - Library repositories hold committed metadata event shards and Git LFS-tracked media paths.
-- Git LFS stores original media files and generated JPEG thumbnails as large objects.
+- Git LFS stores original media files and generated WebP thumbnails as large objects.
 - JSON files under `index/` materialize the gallery read model for serving.
 - The HTTP server performs startup initialization and replay, synchronous ingest, gallery rendering, thumbnail regeneration, image serving, metadata updates, and deletion.
 
@@ -21,7 +21,7 @@ The implementation keeps the source model simple: committed NDJSON events descri
 
 ### Media bytes
 
-Original media files are addressed by SHA-256 OID in add events and stored through Git LFS-tracked `images/{id}.{ext}` paths. Thumbnail bytes are generated as JPEG, addressed by SHA-256 OID, and stored through Git LFS-tracked `thumbnails/{thumbnailOid}.jpg` paths.
+Original media files are addressed by SHA-256 OID in add events and stored through Git LFS-tracked `images/{id}.{ext}` paths. Thumbnail bytes are generated as WebP, addressed by SHA-256 OID, and stored through Git LFS-tracked `thumbnails/{thumbnailOid}.webp` paths.
 
 ### IDs
 
@@ -67,7 +67,7 @@ The renderer also produces toast notification HTML fragments used by the HTMX er
 
 ### Thumbnail boundary
 
-`thumbnail.ts` isolates `mediaforge` and FFmpeg use. Callers provide bytes and a detected extension; the module returns a JPEG blob, OID, and size. Video inputs extract a frame at one second; image inputs use FFmpeg resizing. The caller chooses where to persist the thumbnail and how to record the thumbnail OID.
+`thumbnail.ts` isolates `mediaforge` and FFmpeg use. Callers provide bytes and a detected extension; the module returns a WebP blob, OID, and size. Video inputs extract a frame at one second; image inputs use FFmpeg resizing. The caller chooses where to persist the thumbnail and how to record the thumbnail OID.
 
 ### Import boundary
 
@@ -157,8 +157,8 @@ The endpoint trusts the derived index for original OID lookup and trusts Git LFS
 /regen-thumbnail?id=...
   -> look up image state by ID
   -> read original media file from LFS-tracked path
-  -> generate new JPEG thumbnail
-  -> write thumbnail to thumbnails/{newOid}.jpg
+  -> generate new WebP thumbnail
+  -> write thumbnail to thumbnails/{newOid}.webp
   -> append regen_thumbnail event with rollback around Git commit
   -> apply event to update thumbnailOid in image state
   -> render and return updated image card HTML

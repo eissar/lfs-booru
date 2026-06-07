@@ -2,7 +2,7 @@
  * Thumbnail generation for media files.
  *
  * Uses FFmpeg via mediaforge to extract and resize frames from images and videos.
- * All thumbnails are output as JPEG, scaled to fit within 320x320 while preserving
+ * All thumbnails are output as WebP, scaled to fit within 320x320 while preserving
  * the original aspect ratio. Smaller inputs are not upscaled.
  */
 
@@ -41,7 +41,7 @@ function isVideoFormat(mediaType: string): boolean {
  * Extract a thumbnail frame from a video using FFmpeg.
  *
  * @param bytes Raw video file bytes.
- * @returns JPEG thumbnail as a Blob.
+ * @returns WebP thumbnail as a Blob.
  */
 async function extractVideoThumbnail(_bytes: Uint8Array): Promise<Blob> {
     // Write video bytes to a temporary file for FFmpeg to read.
@@ -49,7 +49,7 @@ async function extractVideoThumbnail(_bytes: Uint8Array): Promise<Blob> {
     const tmpVideoPath = await Deno.makeTempFile({ prefix: 'thumb_video_', suffix: '.tmp' });
     await Deno.writeFile(tmpVideoPath, _bytes);
 
-    const tmpOutputPath = await Deno.makeTempFile({ prefix: 'thumb_video_out_', suffix: '.jpg' });
+    const tmpOutputPath = await Deno.makeTempFile({ prefix: 'thumb_video_out_', suffix: '.webp' });
 
     try {
         await ffmpeg(tmpVideoPath)
@@ -59,13 +59,13 @@ async function extractVideoThumbnail(_bytes: Uint8Array): Promise<Blob> {
                 "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease",
             )
             .addOutputOption('-vframes', '1')
-            .addOutputOption('-q:v', String(Math.round((100 - THUMBNAIL_QUALITY) * 1.28)))
+            .addOutputOption('-q:v', String(THUMBNAIL_QUALITY))
             .run();
 
         const outputBytes = await Deno.readFile(tmpOutputPath);
         // Slice to ensure ArrayBuffer backing (not SharedArrayBuffer).
         const ab = outputBytes.slice().buffer as ArrayBuffer;
-        return new Blob([new Uint8Array(ab)], { type: 'image/jpeg' });
+        return new Blob([new Uint8Array(ab)], { type: 'image/webp' });
     } finally {
         await Deno.remove(tmpVideoPath).catch(() => {
             // Ignore cleanup errors
@@ -80,11 +80,11 @@ async function extractVideoThumbnail(_bytes: Uint8Array): Promise<Blob> {
  * Resize an image to thumbnail dimensions using FFmpeg.
  *
  * @param bytes Raw image file bytes.
- * @returns JPEG thumbnail as a Blob.
+ * @returns WebP thumbnail as a Blob.
  */
 async function resizeImageThumbnail(_bytes: Uint8Array): Promise<Blob> {
     const tmpImagePath = await Deno.makeTempFile({ prefix: 'thumb_image_', suffix: '.tmp' });
-    const tmpOutputPath = await Deno.makeTempFile({ prefix: 'thumb_out_', suffix: '.jpg' });
+    const tmpOutputPath = await Deno.makeTempFile({ prefix: 'thumb_out_', suffix: '.webp' });
 
     await Deno.writeFile(tmpImagePath, _bytes);
 
@@ -94,13 +94,13 @@ async function resizeImageThumbnail(_bytes: Uint8Array): Promise<Blob> {
             .videoFilter(
                 "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease",
             )
-            .addOutputOption('-q:v', String(Math.round((100 - THUMBNAIL_QUALITY) * 1.28)))
+            .addOutputOption('-q:v', String(THUMBNAIL_QUALITY))
             .run();
 
         const outputBytes = await Deno.readFile(tmpOutputPath);
         // Slice to ensure ArrayBuffer backing (not SharedArrayBuffer).
         const ab = outputBytes.slice().buffer as ArrayBuffer;
-        return new Blob([new Uint8Array(ab)], { type: 'image/jpeg' });
+        return new Blob([new Uint8Array(ab)], { type: 'image/webp' });
     } finally {
         await Deno.remove(tmpImagePath).catch(() => {
             // Ignore cleanup errors
@@ -116,7 +116,7 @@ async function resizeImageThumbnail(_bytes: Uint8Array): Promise<Blob> {
  *
  * For video formats, seeks to 1 second and extracts a single frame.
  * For image formats, resizes to the thumbnail size.
- * All output is JPEG for maximum browser compatibility.
+ * All output is WebP.
  *
  * @param bytes Raw media file bytes.
  * @param mediaType Detected media type extension (e.g. 'png', 'mp4').

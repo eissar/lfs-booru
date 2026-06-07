@@ -126,13 +126,13 @@ The event model includes `add`, `tag_add`, `tag_remove`, `delete`, `regen_thumbn
 
 ### Ingest (`src/ingest.ts`)
 
-`ingest()` reads a `File`, computes a SHA-256 OID, reserves an image ID, detects the media extension from magic bytes, derives content type from extension, writes the original file to `images/{id}.{ext}`, generates a JPEG thumbnail, writes it to `thumbnails/{thumbnailOid}.jpg`, and returns an `add` event plus the raw bytes to persist.
+`ingest()` reads a `File`, computes a SHA-256 OID, reserves an image ID, detects the media extension from magic bytes, derives content type from extension, writes the original file to `images/{id}.{ext}`, generates a WebP thumbnail, writes it to `thumbnails/{thumbnailOid}.webp`, and returns an `add` event plus the raw bytes to persist.
 
 Supported magic-byte detection covers PNG, JPEG, GIF, WebP, AVI, FLV, OGV, MPEG program/video streams, WMV/ASF, ISO base media variants (`mp4`, `mov`, `3gp`, `m4v`, `avif`), and EBML variants (`webm`, `mkv`).
 
 ### Thumbnailing (`src/thumbnail.ts`)
 
-Thumbnails are generated through `mediaforge` and FFmpeg. Video inputs extract a frame at one second. Image inputs use FFmpeg resizing. Outputs are JPEG at `320x320` with quality `85`. The thumbnail OID is the SHA-256 digest of the JPEG bytes.
+Thumbnails are generated through `mediaforge` and FFmpeg. Video inputs extract a frame at one second. Image inputs use FFmpeg resizing. Outputs are WebP at `320x320` with quality `85`. The thumbnail OID is the SHA-256 digest of the WebP bytes.
 
 ### Eagle import (`src/eagle-import.ts`)
 
@@ -212,7 +212,7 @@ GET /fragment/inspect/{id}
   -> render inspector fragment
 
 GET /image/{oid}
-  -> if thumbnails/{oid}.jpg exists and is not a pointer, return it
+  -> if thumbnails/{oid}.webp exists and is not a pointer, return it
   -> if thumbnail path is a pointer, run git lfs pull for that path then return it
   -> otherwise map original OID to image state, git lfs pull for image, read .git/lfs/objects/{oid[0:2]}/{oid[2:4]}/{oid}
 ```
@@ -240,7 +240,7 @@ A library repository created from `libraries/template` contains:
   .lfsconfig                    LFS URL and include/exclude defaults
   events/*.ndjson               Committed metadata event shards
   images/*                      Git LFS-tracked original media files
-  thumbnails/*.jpg              Git LFS-tracked generated JPEG thumbnails
+  thumbnails/*.webp             Git LFS-tracked generated WebP thumbnails
   index/next_image_id           Derived write-path ID allocator
   index/image_state.json        Derived image state
   index/tag_index.json          Derived tag index

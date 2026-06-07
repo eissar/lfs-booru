@@ -244,7 +244,7 @@ Deno.test('Server startup thumbnail scanning and --no-scan-thumbnail flag', asyn
             throw new Error('Ingested image has no thumbnail OID');
         }
 
-        const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.jpg`;
+        const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.webp`;
         const stat = await Deno.stat(thumbPath);
         if (!stat.isFile) {
             throw new Error('Thumbnail file was not written');
@@ -253,7 +253,7 @@ Deno.test('Server startup thumbnail scanning and --no-scan-thumbnail flag', asyn
         await shutdownTestServer(port, proc1);
     }
 
-    const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.jpg`;
+    const thumbPath = `${tempDir}/thumbnails/${thumbnailOid}.webp`;
     await Deno.remove(thumbPath);
 
     const proc2 = await startTestServer(port, tempDir, ['--no-scan-thumbnail']);
@@ -268,9 +268,18 @@ Deno.test('Server startup thumbnail scanning and --no-scan-thumbnail flag', asyn
 
     const proc3 = await startTestServer(port, tempDir);
     try {
-        const stat = await Deno.stat(thumbPath).catch(() => null);
+        const statePath = `${tempDir}/index/image_state.json`;
+        const stateText = await Deno.readTextFile(statePath);
+        const state = JSON.parse(stateText);
+        // deno-lint-ignore no-explicit-any
+        const image = Object.values(state)[0] as any;
+        if (!image.thumbnailOid) {
+            throw new Error('Thumbnail was not generated: no thumbnailOid in index');
+        }
+        const regeneratedThumbPath = `${tempDir}/thumbnails/${image.thumbnailOid}.jpg`;
+        const stat = await Deno.stat(regeneratedThumbPath).catch(() => null);
         if (!stat || !stat.isFile) {
-            throw new Error('Thumbnail was not generated on startup');
+            throw new Error('Thumbnail file was not found on disk after startup regeneration');
         }
     } finally {
         await shutdownTestServer(port, proc3);
