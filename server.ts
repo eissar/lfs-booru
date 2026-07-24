@@ -864,8 +864,14 @@ async function scanAndGenerateThumbnails(
     try {
         await using preparedEvents = await Deno.open(preparedEventsPath, { write: true, createNew: true });
 
+        let progressIdx = 0;
         for (const [id, img] of missing) {
-            console.log(`Generating thumbnail for image ID "${id}" (${img.path})...`);
+            progressIdx++;
+            Deno.stdout.write(
+                new TextEncoder().encode(
+                    `\rGenerating thumbnail ${progressIdx}/${missing.length}: image ID "${id}" (${img.path})...`,
+                ),
+            );
             const fileExtension = img.path.split('.').pop() ?? 'jpg';
             const bytes = await readMediaBytes(lib, img.path).catch((err: unknown) => {
                 console.error(
@@ -909,6 +915,7 @@ async function scanAndGenerateThumbnails(
             assetPaths.push(`thumbnails/${thumbnailOid}.jpg`);
             generatedCount++;
         }
+        Deno.stdout.write(new TextEncoder().encode('\n'));
 
         if (generatedCount === 0) {
             console.log('No thumbnails were successfully generated.');
